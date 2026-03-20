@@ -242,7 +242,7 @@ export function MainScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* 中间内容区域 - 音高图/钢琴提示 + 控制按钮 + 钢琴 */}
+      {/* 中间内容区域 - 音高图/钢琴提示 + 控制按钮 */}
       <View style={styles.middleContent}>
         {/* 音高曲线图 - 录音模式显示 */}
         {appMode === 'recording' && (
@@ -252,6 +252,7 @@ export function MainScreen({ navigation }: any) {
               minNote={currentMode.startNote}
               maxNote={currentMode.endNote}
               duration={CONFIG.DEFAULT_CHART_DURATION}
+              height={SCREEN_HEIGHT * 5 / 12}
             />
           </View>
         )}
@@ -306,41 +307,41 @@ export function MainScreen({ navigation }: any) {
             </TouchableOpacity>
           )}
         </View>
+      </View>
 
-        {/* 虚拟钢琴 */}
-        <View style={styles.pianoSection}>
-          <TouchableOpacity
-            style={styles.pianoHeader}
-            onPress={() => setPianoExpanded(!pianoExpanded)}
-          >
-            <Text style={styles.pianoHeaderText}>
-              {pianoExpanded ? '▼' : '▲'} 虚拟钢琴（{currentMode.startNote} ~ {currentMode.endNote}）
-            </Text>
-          </TouchableOpacity>
+      {/* 虚拟钢琴 - 固定在底部 */}
+      <View style={styles.pianoSection}>
+        <TouchableOpacity
+          style={styles.pianoHeader}
+          onPress={() => setPianoExpanded(!pianoExpanded)}
+        >
+          <Text style={styles.pianoHeaderText}>
+            {pianoExpanded ? '▼' : '▲'} 虚拟钢琴（{currentMode.startNote} ~ {currentMode.endNote}）
+          </Text>
+        </TouchableOpacity>
 
-          {pianoExpanded && (
-            <View style={styles.pianoWrapper}>
-              <Piano
-                startNote={currentMode.startNote}
-                endNote={currentMode.endNote}
-                disabled={appMode === 'recording' && recordingState === 'recording'}
-                onKeyPress={handlePianoKeyPress}
-              />
-              {appMode === 'recording' && recordingState === 'recording' && (
-                <View style={styles.pianoDisabledHintOverlay}>
-                  <View style={styles.pianoDisabledHint}>
-                    <Text style={styles.pianoDisabledHintText}>
-                      [R] 录音中
-                    </Text>
-                    <Text style={styles.pianoDisabledHintSubtext}>
-                      双击暂停录音，激活钢琴
-                    </Text>
-                  </View>
+        {pianoExpanded && (
+          <View style={styles.pianoWrapper}>
+            <Piano
+              startNote={currentMode.startNote}
+              endNote={currentMode.endNote}
+              disabled={appMode === 'recording' && recordingState === 'recording'}
+              onKeyPress={handlePianoKeyPress}
+            />
+            {appMode === 'recording' && recordingState === 'recording' && (
+              <View style={styles.pianoDisabledHintOverlay}>
+                <View style={styles.pianoDisabledHint}>
+                  <Text style={styles.pianoDisabledHintText}>
+                    [R] 录音中
+                  </Text>
+                  <Text style={styles.pianoDisabledHintSubtext}>
+                    双击暂停录音，激活钢琴
+                  </Text>
                 </View>
-              )}
-            </View>
-          )}
-        </View>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       {/* 底部标签按钮 */}
@@ -479,11 +480,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden'
   },
   chartContainer: {
-    flex: 1,
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 4,
-    minHeight: 0
+    height: SCREEN_HEIGHT * 5 / 12
   },
   pianoModeHint: {
     flex: 1,
@@ -546,11 +546,11 @@ const styles = StyleSheet.create({
   },
   pianoSection: {
     borderTopWidth: 1,
-    borderTopColor: '#eee',
-    flexShrink: 0
+    borderTopColor: '#eee'
   },
   pianoHeader: {
-    padding: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     backgroundColor: '#f5f5f5',
     alignItems: 'center'
   },
