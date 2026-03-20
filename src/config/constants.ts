@@ -32,10 +32,10 @@ export const CONFIG = {
 
 // 预设音域模式
 export const PRESET_MODES = [
-  { id: 'male', name: '♂ 男声', startNote: 'E2', endNote: 'C5', minFreq: 80, maxFreq: 520 },
-  { id: 'female', name: '♀ 女声', startNote: 'C3', endNote: 'C6', minFreq: 160, maxFreq: 1040 },
-  { id: 'guitar', name: '🎸 吉他', startNote: 'E2', endNote: 'E6', minFreq: 82, maxFreq: 1319 },
-  { id: 'violin', name: '🎻 小提琴', startNote: 'G3', endNote: 'E7', minFreq: 196, maxFreq: 2637 }
+  { id: 'male', name: '男声', startNote: 'E2', endNote: 'C5', minFreq: 80, maxFreq: 520 },
+  { id: 'female', name: '女声', startNote: 'C3', endNote: 'C6', minFreq: 160, maxFreq: 1040 },
+  { id: 'guitar', name: '吉他', startNote: 'E2', endNote: 'E6', minFreq: 82, maxFreq: 1319 },
+  { id: 'violin', name: '小提琴', startNote: 'G3', endNote: 'E7', minFreq: 196, maxFreq: 2637 }
 ] as const
 
 // 音符名称映射

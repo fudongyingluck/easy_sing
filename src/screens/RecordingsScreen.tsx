@@ -204,7 +204,7 @@ export function RecordingsScreen() {
         ) : (
           <>
             <View style={{ width: 60 }} />
-            <Text style={styles.title}>📂 我的录音</Text>
+            <Text style={styles.title}>我的录音</Text>
             {recordings.length > 0 && (
               <TouchableOpacity onPress={() => setIsSelectionMode(true)}>
                 <Text style={styles.backButton}>选择</Text>

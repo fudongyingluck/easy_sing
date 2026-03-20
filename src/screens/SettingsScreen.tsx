@@ -115,7 +115,7 @@ export function SettingsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={{ width: 60 }} />
-        <Text style={styles.title}>⚙️ 设置</Text>
+        <Text style={styles.title}>设置</Text>
         <View style={{ width: 60 }} />
       </View>
 
