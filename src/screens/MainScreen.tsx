@@ -14,7 +14,8 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
 export function MainScreen({ navigation }: any) {
   const [appMode, setAppMode] = useState<AppMode>('recording')
   const [recordingState, setRecordingState] = useState<RecordingState>('idle')
-  const [currentModeId, setCurrentModeId] = useState<string>('male')
+  const [currentModeId, setCurrentModeId] = useState<string>('female')
+  const [activeTab, setActiveTab] = useState<'practice' | 'records'>('practice')
   const [customModes, setCustomModes] = useState<any[]>([])
   const [recordingId, setRecordingId] = useState<string | null>(null)
   const [recordingDuration, setRecordingDuration] = useState(0)
@@ -241,7 +242,7 @@ export function MainScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* 中间内容区域 - 音高图/钢琴提示 + 控制按钮 */}
+      {/* 中间内容区域 - 音高图/钢琴提示 + 控制按钮 + 钢琴 */}
       <View style={styles.middleContent}>
         {/* 音高曲线图 - 录音模式显示 */}
         {appMode === 'recording' && (
@@ -251,7 +252,6 @@ export function MainScreen({ navigation }: any) {
               minNote={currentMode.startNote}
               maxNote={currentMode.endNote}
               duration={CONFIG.DEFAULT_CHART_DURATION}
-              height={SCREEN_HEIGHT * 5 / 12}
             />
           </View>
         )}
@@ -306,41 +306,61 @@ export function MainScreen({ navigation }: any) {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* 虚拟钢琴 */}
+        <View style={styles.pianoSection}>
+          <TouchableOpacity
+            style={styles.pianoHeader}
+            onPress={() => setPianoExpanded(!pianoExpanded)}
+          >
+            <Text style={styles.pianoHeaderText}>
+              {pianoExpanded ? '▼' : '▲'} 虚拟钢琴（{currentMode.startNote} ~ {currentMode.endNote}）
+            </Text>
+          </TouchableOpacity>
+
+          {pianoExpanded && (
+            <View style={styles.pianoWrapper}>
+              <Piano
+                startNote={currentMode.startNote}
+                endNote={currentMode.endNote}
+                disabled={appMode === 'recording' && recordingState === 'recording'}
+                onKeyPress={handlePianoKeyPress}
+              />
+              {appMode === 'recording' && recordingState === 'recording' && (
+                <View style={styles.pianoDisabledHintOverlay}>
+                  <View style={styles.pianoDisabledHint}>
+                    <Text style={styles.pianoDisabledHintText}>
+                      [R] 录音中
+                    </Text>
+                    <Text style={styles.pianoDisabledHintSubtext}>
+                      双击暂停录音，激活钢琴
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
       </View>
 
-      {/* 虚拟钢琴 - 固定在底部 */}
-      <View style={styles.pianoSection}>
+      {/* 底部标签按钮 */}
+      <View style={styles.bottomTabs}>
         <TouchableOpacity
-          style={styles.pianoHeader}
-          onPress={() => setPianoExpanded(!pianoExpanded)}
+          style={[styles.tabButton, activeTab === 'practice' && styles.tabButtonActive]}
+          onPress={() => setActiveTab('practice')}
         >
-          <Text style={styles.pianoHeaderText}>
-            {pianoExpanded ? '▼' : '▲'} 虚拟钢琴（{currentMode.startNote} ~ {currentMode.endNote}）
+          <Text style={[styles.tabButtonText, activeTab === 'practice' && styles.tabButtonTextActive]}>
+            练习
           </Text>
         </TouchableOpacity>
-
-        {pianoExpanded && (
-          <View style={styles.pianoWrapper}>
-            <Piano
-              startNote={currentMode.startNote}
-              endNote={currentMode.endNote}
-              disabled={appMode === 'recording' && recordingState === 'recording'}
-              onKeyPress={handlePianoKeyPress}
-            />
-            {appMode === 'recording' && recordingState === 'recording' && (
-              <View style={styles.pianoDisabledHintOverlay}>
-                <View style={styles.pianoDisabledHint}>
-                  <Text style={styles.pianoDisabledHintText}>
-                    [R] 录音中
-                  </Text>
-                  <Text style={styles.pianoDisabledHintSubtext}>
-                    双击暂停录音，激活钢琴
-                  </Text>
-                </View>
-              </View>
-            )}
-          </View>
-        )}
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'records' && styles.tabButtonActive]}
+          onPress={() => navigation.navigate('Recordings')}
+        >
+          <Text style={[styles.tabButtonText, activeTab === 'records' && styles.tabButtonTextActive]}>
+            记录
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* 模式选择器弹窗 */}
@@ -459,10 +479,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden'
   },
   chartContainer: {
+    flex: 1,
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 4,
-    height: SCREEN_HEIGHT * 5 / 12
+    minHeight: 0
   },
   pianoModeHint: {
     flex: 1,
@@ -525,7 +546,8 @@ const styles = StyleSheet.create({
   },
   pianoSection: {
     borderTopWidth: 1,
-    borderTopColor: '#eee'
+    borderTopColor: '#eee',
+    flexShrink: 0
   },
   pianoHeader: {
     padding: 12,
@@ -619,5 +641,28 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#007AFF',
     fontWeight: 'bold'
+  },
+  bottomTabs: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    backgroundColor: '#fff'
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  tabButtonActive: {
+    backgroundColor: '#f0f9ff'
+  },
+  tabButtonText: {
+    fontSize: 16,
+    color: '#666'
+  },
+  tabButtonTextActive: {
+    color: '#007AFF',
+    fontWeight: '500'
   }
 })
