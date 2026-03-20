@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Ionicons from 'react-native-vector-icons/Ionicons'
 import { PRESET_MODES, CONFIG } from '../config/constants'
 import { loadUserSettings, saveUserSettings } from '../services/storage'
 import { noteNameToMidi, midiToNoteName, noteNameToFreq } from '../utils/noteUtils'
@@ -115,7 +116,10 @@ export function SettingsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={{ width: 60 }} />
-        <Text style={styles.title}>设置</Text>
+        <View style={styles.titleWithIcon}>
+          <Ionicons name="settings-outline" size={20} color="#000" style={styles.titleIcon} />
+          <Text style={styles.title}>设置</Text>
+        </View>
         <View style={{ width: 60 }} />
       </View>
 
@@ -151,13 +155,26 @@ export function SettingsScreen() {
                     onPress={() => handleSelectMode(mode.id)}
                   >
                     <View style={styles.modeItemLeft}>
-                      <Text style={styles.modeItemName}>{mode.name}</Text>
+                      <View style={styles.modeItemWithIcon}>
+                        {(mode as any).icon && (
+                          <Ionicons
+                            name={(mode as any).icon}
+                            size={20}
+                            color={mode.id === currentModeId ? '#007AFF' : '#666'}
+                            style={styles.modeItemIcon}
+                          />
+                        )}
+                        <Text style={[
+                          styles.modeItemName,
+                          mode.id === currentModeId && styles.modeItemNameSelected
+                        ]}>{mode.name}</Text>
+                      </View>
                       <Text style={styles.modeItemRange}>
                         {mode.startNote} ~ {mode.endNote}
                       </Text>
                     </View>
                     {mode.id === currentModeId && (
-                      <Text style={styles.modeItemCheck}>✓</Text>
+                      <Ionicons name="checkmark" size={20} color="#007AFF" />
                     )}
                   </TouchableOpacity>
                   {isCustom && (
@@ -268,6 +285,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold'
   },
+  titleWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  titleIcon: {
+    marginRight: 6
+  },
   content: {
     flex: 1
   },
@@ -321,10 +345,20 @@ const styles = StyleSheet.create({
   modeItemLeft: {
     flex: 1
   },
+  modeItemWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  modeItemIcon: {
+    marginRight: 8
+  },
   modeItemName: {
     fontSize: 16,
     fontWeight: '500',
     marginBottom: 2
+  },
+  modeItemNameSelected: {
+    color: '#007AFF'
   },
   modeItemRange: {
     fontSize: 14,

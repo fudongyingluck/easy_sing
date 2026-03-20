@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Ionicons from 'react-native-vector-icons/Ionicons'
 import { Recording } from '../types'
 import { loadRecordings, saveRecordings, deleteRecordingFiles } from '../services/storage'
 import { audioService } from '../services/audio'
@@ -204,7 +205,10 @@ export function RecordingsScreen() {
         ) : (
           <>
             <View style={{ width: 60 }} />
-            <Text style={styles.title}>我的录音</Text>
+            <View style={styles.titleWithIcon}>
+              <Ionicons name="folder-outline" size={20} color="#000" style={styles.titleIcon} />
+              <Text style={styles.title}>我的录音</Text>
+            </View>
             {recordings.length > 0 && (
               <TouchableOpacity onPress={() => setIsSelectionMode(true)}>
                 <Text style={styles.backButton}>选择</Text>
@@ -323,6 +327,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: 'bold'
+  },
+  titleWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  titleIcon: {
+    marginRight: 6
   },
   emptyState: {
     flex: 1,
