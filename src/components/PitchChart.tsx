@@ -34,6 +34,14 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
   const scrollContentHeight = Math.max(chartHeight - X_AXIS_HEIGHT, svgHeight)
   const visibleHeight = chartHeight - X_AXIS_HEIGHT
 
+  // 坐标转换
+  const getMidiY = (midi: number) => {
+    const normalized = (midi - minMidi) / midiRange
+    return PADDING.top + (1 - normalized) * (svgHeight - PADDING.top - PADDING.bottom)
+  }
+
+  const midiToY = getMidiY
+
   // 初始滚动到音域的中间位置
   useEffect(() => {
     if (!initialScrollDone && scrollViewRef.current && scrollContentHeight > visibleHeight) {
@@ -58,13 +66,6 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
     const relativeTime = time - startTime
     return PADDING.left + (relativeTime / duration) * chartWidth
   }
-
-  const getMidiY = (midi: number) => {
-    const normalized = (midi - minMidi) / midiRange
-    return PADDING.top + (1 - normalized) * (svgHeight - PADDING.top - PADDING.bottom)
-  }
-
-  const midiToY = getMidiY
 
   // 生成Y轴标签（音符）- 放在内侧（只标白键）
   const yAxisLabels = []

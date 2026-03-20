@@ -28,14 +28,23 @@ export function MainScreen({ navigation }: any) {
   const lastTapTimeRef = useRef<number>(0)
 
   // 加载用户设置
+  const loadSettings = async () => {
+    const settings = await loadUserSettings()
+    setCurrentModeId(settings.currentModeId)
+    setCustomModes(settings.customModes)
+  }
+
   useEffect(() => {
-    const loadData = async () => {
-      const settings = await loadUserSettings()
-      setCurrentModeId(settings.currentModeId)
-      setCustomModes(settings.customModes)
-    }
-    loadData()
+    loadSettings()
   }, [])
+
+  // 从其他页面返回时重新加载设置
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadSettings()
+    })
+    return unsubscribe
+  }, [navigation])
 
   // 双击音域区切换模式
   const handleRangeAreaTap = () => {
@@ -239,6 +248,7 @@ export function MainScreen({ navigation }: any) {
         {appMode === 'recording' && (
           <View style={styles.chartContainer}>
             <PitchChart
+              key={`${currentMode.startNote}-${currentMode.endNote}`}
               data={pitchData}
               minNote={currentMode.startNote}
               maxNote={currentMode.endNote}
