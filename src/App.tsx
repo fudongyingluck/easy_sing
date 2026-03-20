@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react'
 import { NavigationContainer } from '@react-navigation/native'
-import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import { MainScreen } from './screens/MainScreen'
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import { PracticeScreen } from './screens/PracticeScreen'
 import { RecordingsScreen } from './screens/RecordingsScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { initStorage } from './services/storage'
 
-const Stack = createNativeStackNavigator()
+const Tab = createBottomTabNavigator()
 
 export default function App() {
   useEffect(() => {
@@ -16,15 +16,40 @@ export default function App() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator
+      <Tab.Navigator
         screenOptions={{
-          headerShown: false
+          headerShown: false,
+          tabBarActiveTintColor: '#007AFF',
+          tabBarInactiveTintColor: '#666',
+          tabBarStyle: {
+            borderTopWidth: 1,
+            borderTopColor: '#eee',
+            backgroundColor: '#fff'
+          }
         }}
       >
-        <Stack.Screen name="Main" component={MainScreen} />
-        <Stack.Screen name="Recordings" component={RecordingsScreen} />
-        <Stack.Screen name="Settings" component={SettingsScreen} />
-      </Stack.Navigator>
+        <Tab.Screen
+          name="Practice"
+          component={PracticeScreen}
+          options={{
+            tabBarLabel: '练习'
+          }}
+        />
+        <Tab.Screen
+          name="Recordings"
+          component={RecordingsScreen}
+          options={{
+            tabBarLabel: '记录'
+          }}
+        />
+        <Tab.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{
+            tabBarLabel: '设置'
+          }}
+        />
+      </Tab.Navigator>
     </NavigationContainer>
   )
 }

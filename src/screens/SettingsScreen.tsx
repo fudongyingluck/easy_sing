@@ -6,7 +6,7 @@ import { loadUserSettings, saveUserSettings } from '../services/storage'
 import { noteNameToMidi, midiToNoteName, noteNameToFreq } from '../utils/noteUtils'
 import { NotePicker } from '../components/NotePicker'
 
-export function SettingsScreen({ navigation }: any) {
+export function SettingsScreen() {
   const [currentModeId, setCurrentModeId] = useState<string>('female')
   const [customModes, setCustomModes] = useState<any[]>([])
   const [showAddMode, setShowAddMode] = useState(false)
@@ -114,9 +114,7 @@ export function SettingsScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>◀ 返回</Text>
-        </TouchableOpacity>
+        <View style={{ width: 60 }} />
         <Text style={styles.title}>⚙️ 设置</Text>
         <View style={{ width: 60 }} />
       </View>

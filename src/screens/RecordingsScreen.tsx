@@ -5,7 +5,7 @@ import { Recording } from '../types'
 import { loadRecordings, saveRecordings, deleteRecordingFiles } from '../services/storage'
 import { audioService } from '../services/audio'
 
-export function RecordingsScreen({ navigation }: any) {
+export function RecordingsScreen() {
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(0)
@@ -203,9 +203,7 @@ export function RecordingsScreen({ navigation }: any) {
           </>
         ) : (
           <>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Text style={styles.backButton}>◀ 返回</Text>
-            </TouchableOpacity>
+            <View style={{ width: 60 }} />
             <Text style={styles.title}>📂 我的录音</Text>
             {recordings.length > 0 && (
               <TouchableOpacity onPress={() => setIsSelectionMode(true)}>
