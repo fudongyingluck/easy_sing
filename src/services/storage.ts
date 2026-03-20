@@ -8,7 +8,7 @@ const RECORDINGS_KEY = '@pitchperfect:recordings'
 
 // 默认设置
 const defaultSettings: UserSettings = {
-  currentModeId: 'male',
+  currentModeId: 'female',
   customModes: [],
   lastUpdated: new Date().toISOString()
 }

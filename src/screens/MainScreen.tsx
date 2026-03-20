@@ -15,14 +15,12 @@ export function MainScreen({ navigation }: any) {
   const [appMode, setAppMode] = useState<AppMode>('recording')
   const [recordingState, setRecordingState] = useState<RecordingState>('idle')
   const [currentModeId, setCurrentModeId] = useState<string>('female')
-  const [activeTab, setActiveTab] = useState<'practice' | 'records'>('practice')
+  const [activeTab, setActiveTab] = useState<'practice' | 'records' | 'settings'>('practice')
   const [customModes, setCustomModes] = useState<any[]>([])
   const [recordingId, setRecordingId] = useState<string | null>(null)
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [pitchData, setPitchData] = useState<any[]>([])
-  const [currentPitch, setCurrentPitch] = useState<string | null>(null)
   const [recordingTime, setRecordingTime] = useState(0)
-  const [showModeSelector, setShowModeSelector] = useState(false)
   const [pianoExpanded, setPianoExpanded] = useState(true)
   const [hasSavedRecording, setHasSavedRecording] = useState(false)
 
@@ -217,29 +215,22 @@ export function MainScreen({ navigation }: any) {
     audioPlayer.playNote(note, 0.5)
   }
 
-  // 初始化音频播放器
-  useEffect(() => {
-    // 可以在这里预加载常用音符
-    // audioPlayer.preloadNotes(currentMode.startNote, currentMode.endNote)
-  }, [currentMode])
+  // 处理底部标签点击
+  const handleTabPress = (tab: 'practice' | 'records' | 'settings') => {
+    if (tab === 'records') {
+      navigation.navigate('Recordings')
+    } else if (tab === 'settings') {
+      navigation.navigate('Settings')
+    } else {
+      setActiveTab(tab)
+    }
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       {/* 标题 */}
       <View style={styles.header}>
         <Text style={styles.title}>[] 实时音准练习</Text>
-      </View>
-
-      {/* 模式选择 */}
-      <View style={styles.modeSection}>
-        <TouchableOpacity
-          style={styles.modeButton}
-          onPress={() => setShowModeSelector(true)}
-        >
-          <Text style={styles.modeButtonText}>
-            {currentMode.name}({currentMode.startNote}~{currentMode.endNote})
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {/* 中间内容区域 - 音高图/钢琴提示 + 控制按钮 */}
@@ -348,7 +339,7 @@ export function MainScreen({ navigation }: any) {
       <View style={styles.bottomTabs}>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === 'practice' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('practice')}
+          onPress={() => handleTabPress('practice')}
         >
           <Text style={[styles.tabButtonText, activeTab === 'practice' && styles.tabButtonTextActive]}>
             练习
@@ -356,73 +347,22 @@ export function MainScreen({ navigation }: any) {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === 'records' && styles.tabButtonActive]}
-          onPress={() => navigation.navigate('Recordings')}
+          onPress={() => handleTabPress('records')}
         >
           <Text style={[styles.tabButtonText, activeTab === 'records' && styles.tabButtonTextActive]}>
             记录
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'settings' && styles.tabButtonActive]}
+          onPress={() => handleTabPress('settings')}
+        >
+          <Text style={[styles.tabButtonText, activeTab === 'settings' && styles.tabButtonTextActive]}>
+            设置
+          </Text>
+        </TouchableOpacity>
       </View>
-
-      {/* 模式选择器弹窗 */}
-      {showModeSelector && (
-        <ModeSelector
-          visible={showModeSelector}
-          currentModeId={currentModeId}
-          customModes={customModes}
-          onSelect={(modeId) => {
-            setCurrentModeId(modeId)
-            setShowModeSelector(false)
-            // 保存设置
-            saveUserSettings({ currentModeId, customModes, lastUpdated: new Date().toISOString() })
-          }}
-          onClose={() => setShowModeSelector(false)}
-        />
-      )}
     </SafeAreaView>
-  )
-}
-
-// 模式选择器组件
-function ModeSelector({ visible, currentModeId, customModes, onSelect, onClose }: {
-  visible: boolean
-  currentModeId: string
-  customModes: any[]
-  onSelect: (modeId: string) => void
-  onClose: () => void
-}) {
-  if (!visible) return null
-
-  const allModes = [...PRESET_MODES, ...customModes]
-
-  return (
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalContent}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>选择模式</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.modalClose}>取消</Text>
-          </TouchableOpacity>
-        </View>
-        <ScrollView style={styles.modeList}>
-          {allModes.map((mode) => (
-            <TouchableOpacity
-              key={mode.id}
-              style={[
-                styles.modeItem,
-                mode.id === currentModeId && styles.modeItemSelected
-              ]}
-              onPress={() => onSelect(mode.id)}
-            >
-              <Text style={styles.modeItemText}>
-                {mode.name} ({mode.startNote}-{mode.endNote})
-              </Text>
-              {mode.id === currentModeId && <Text style={styles.modeItemCheck}>✓</Text>}
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    </View>
   )
 }
 
@@ -447,32 +387,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: 'bold'
-  },
-  modeSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee'
-  },
-  modeButton: {
-    backgroundColor: '#007AFF',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center'
-  },
-  modeButtonText: {
-    color: '#fff',
-    fontSize: 16
-  },
-  recordingIndicator: {
-    padding: 12,
-    backgroundColor: '#FFF3CD',
-    alignItems: 'center'
-  },
-  recordingText: {
-    fontSize: 16,
-    color: '#856404',
-    fontWeight: '500'
   },
   middleContent: {
     flex: 1,
@@ -568,7 +482,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
+    height: 150,
     backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -590,60 +504,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#856404'
   },
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end'
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '60%'
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee'
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold'
-  },
-  modalClose: {
-    fontSize: 16,
-    color: '#007AFF'
-  },
-  modeList: {
-    padding: 16
-  },
-  modeItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee'
-  },
-  modeItemSelected: {
-    backgroundColor: '#E3F2FD'
-  },
-  modeItemText: {
-    fontSize: 16
-  },
-  modeItemCheck: {
-    fontSize: 18,
-    color: '#007AFF',
-    fontWeight: 'bold'
-  },
   bottomTabs: {
     flexDirection: 'row',
     borderTopWidth: 1,
@@ -664,7 +524,7 @@ const styles = StyleSheet.create({
     color: '#666'
   },
   tabButtonTextActive: {
-    color: '#007AFF',
+    color: '#64B5F6',
     fontWeight: '500'
   }
 })

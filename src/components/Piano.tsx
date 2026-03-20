@@ -183,7 +183,7 @@ export function Piano({ startNote, endNote, disabled = false, onKeyPress }: Pian
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#333',
-    height: 170
+    height: 175
   },
   scrollContent: {
     paddingHorizontal: 8,
