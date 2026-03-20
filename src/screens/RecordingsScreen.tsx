@@ -206,7 +206,7 @@ export function RecordingsScreen() {
           <>
             <View style={{ width: 60 }} />
             <View style={styles.titleWithIcon}>
-              <Ionicons name="folder-outline" size={20} color="#000" style={styles.titleIcon} />
+              <Ionicons name="folder-outline" size={22} color="#4ECDC4" style={styles.titleIcon} />
               <Text style={styles.title}>我的录音</Text>
             </View>
             {recordings.length > 0 && (

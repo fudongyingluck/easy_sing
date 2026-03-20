@@ -117,7 +117,7 @@ export function SettingsScreen() {
       <View style={styles.header}>
         <View style={{ width: 60 }} />
         <View style={styles.titleWithIcon}>
-          <Ionicons name="settings-outline" size={20} color="#000" style={styles.titleIcon} />
+          <Ionicons name="settings-outline" size={22} color="#FF6B6B" style={styles.titleIcon} />
           <Text style={styles.title}>设置</Text>
         </View>
         <View style={{ width: 60 }} />
@@ -159,8 +159,8 @@ export function SettingsScreen() {
                         {(mode as any).icon && (
                           <Ionicons
                             name={(mode as any).icon}
-                            size={20}
-                            color={mode.id === currentModeId ? '#007AFF' : '#666'}
+                            size={24}
+                            color={mode.id === currentModeId ? '#FF6B6B' : '#FFB3B3'}
                             style={styles.modeItemIcon}
                           />
                         )}
@@ -174,7 +174,7 @@ export function SettingsScreen() {
                       </Text>
                     </View>
                     {mode.id === currentModeId && (
-                      <Ionicons name="checkmark" size={20} color="#007AFF" />
+                      <Ionicons name="checkmark-circle" size={24} color="#FF6B6B" />
                     )}
                   </TouchableOpacity>
                   {isCustom && (
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     marginBottom: 2
   },
   modeItemNameSelected: {
-    color: '#007AFF'
+    color: '#FF6B6B'
   },
   modeItemRange: {
     fontSize: 14,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Ionicons from 'react-native-vector-icons/Ionicons'
 import { PitchChart } from '../components/PitchChart'
 import { Piano } from '../components/Piano'
 import { audioService } from '../services/audio'
@@ -218,7 +219,10 @@ export function PracticeScreen() {
     <SafeAreaView style={styles.container}>
       {/* 标题 */}
       <View style={styles.header}>
-        <Text style={styles.title}>[] 实时音准练习</Text>
+        <View style={styles.titleWithIcon}>
+          <Ionicons name="musical-note" size={24} color="#9B59B6" style={styles.titleIcon} />
+          <Text style={styles.title}>实时音准练习</Text>
+        </View>
       </View>
 
       {/* 中间内容区域 - 音高图/钢琴提示 + 控制按钮 */}
@@ -337,6 +341,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
     alignItems: 'center'
+  },
+  titleWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  titleIcon: {
+    marginRight: 8
   },
   title: {
     fontSize: 20,
