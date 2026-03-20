@@ -12,14 +12,59 @@ export function RecordingsScreen({ navigation }: any) {
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
-    loadRecordingsList()
-  }, [])
+  // 格式化时长
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
 
+  // 格式化文件大小
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes}B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+  }
+
+  // 切换选择状态
+  const toggleSelection = (id: string) => {
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+    setSelectedIds(newSelected)
+    if (newSelected.size === 0) {
+      setIsSelectionMode(false)
+    }
+  }
+
+  // 全选/取消全选
+  const toggleSelectAll = () => {
+    if (selectedIds.size === recordings.length) {
+      setSelectedIds(new Set())
+      setIsSelectionMode(false)
+    } else {
+      setSelectedIds(new Set(recordings.map(r => r.id)))
+    }
+  }
+
+  // 退出选择模式
+  const exitSelectionMode = () => {
+    setSelectedIds(new Set())
+    setIsSelectionMode(false)
+  }
+
+  // 加载录音列表
   const loadRecordingsList = async () => {
     const list = await loadRecordings()
     setRecordings(list)
   }
+
+  useEffect(() => {
+    loadRecordingsList()
+  }, [])
 
   // 播放录音
   const playRecording = async (recording: Recording) => {
@@ -99,30 +144,6 @@ export function RecordingsScreen({ navigation }: any) {
     )
   }
 
-  // 切换选择状态
-  const toggleSelection = (id: string) => {
-    const newSelected = new Set(selectedIds)
-    if (newSelected.has(id)) {
-      newSelected.delete(id)
-    } else {
-      newSelected.add(id)
-    }
-    setSelectedIds(newSelected)
-    if (newSelected.size === 0) {
-      setIsSelectionMode(false)
-    }
-  }
-
-  // 全选/取消全选
-  const toggleSelectAll = () => {
-    if (selectedIds.size === recordings.length) {
-      setSelectedIds(new Set())
-      setIsSelectionMode(false)
-    } else {
-      setSelectedIds(new Set(recordings.map(r => r.id)))
-    }
-  }
-
   // 批量删除
   const deleteSelected = async () => {
     if (selectedIds.size === 0) return
@@ -143,7 +164,8 @@ export function RecordingsScreen({ navigation }: any) {
             }
 
             // 删除选中的录音文件
-            for (const id of selectedIds) {
+            const selectedIdArray = Array.from(selectedIds)
+            for (const id of selectedIdArray) {
               const recording = recordings.find(r => r.id === id)
               if (recording) {
                 await deleteRecordingFiles(recording)
@@ -162,26 +184,6 @@ export function RecordingsScreen({ navigation }: any) {
         }
       ]
     )
-  }
-
-  // 退出选择模式
-  const exitSelectionMode = () => {
-    setSelectedIds(new Set())
-    setIsSelectionMode(false)
-  }
-
-  // 格式化时长
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
-
-  // 格式化文件大小
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes}B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
   }
 
   return (
