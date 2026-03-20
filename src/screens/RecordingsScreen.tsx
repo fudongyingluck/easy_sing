@@ -9,6 +9,8 @@ export function RecordingsScreen({ navigation }: any) {
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(0)
+  const [isSelectionMode, setIsSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     loadRecordingsList()
@@ -21,6 +23,11 @@ export function RecordingsScreen({ navigation }: any) {
 
   // 播放录音
   const playRecording = async (recording: Recording) => {
+    if (isSelectionMode) {
+      toggleSelection(recording.id)
+      return
+    }
+
     try {
       if (playingId) {
         audioService.stopPlayback()
@@ -46,6 +53,11 @@ export function RecordingsScreen({ navigation }: any) {
 
   // 分享录音
   const shareRecording = async (recording: Recording) => {
+    if (isSelectionMode) {
+      toggleSelection(recording.id)
+      return
+    }
+
     try {
       await Share.share({
         title: '我的音准练习录音',
@@ -57,8 +69,13 @@ export function RecordingsScreen({ navigation }: any) {
     }
   }
 
-  // 删除录音
+  // 删除单个录音
   const deleteRecording = async (recording: Recording) => {
+    if (isSelectionMode) {
+      toggleSelection(recording.id)
+      return
+    }
+
     Alert.alert(
       '确认删除',
       `确定要删除录音"${recording.name}"吗？`,
@@ -82,6 +99,77 @@ export function RecordingsScreen({ navigation }: any) {
     )
   }
 
+  // 切换选择状态
+  const toggleSelection = (id: string) => {
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+    setSelectedIds(newSelected)
+    if (newSelected.size === 0) {
+      setIsSelectionMode(false)
+    }
+  }
+
+  // 全选/取消全选
+  const toggleSelectAll = () => {
+    if (selectedIds.size === recordings.length) {
+      setSelectedIds(new Set())
+      setIsSelectionMode(false)
+    } else {
+      setSelectedIds(new Set(recordings.map(r => r.id)))
+    }
+  }
+
+  // 批量删除
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0) return
+
+    Alert.alert(
+      '确认删除',
+      `确定要删除选中的 ${selectedIds.size} 个录音吗？`,
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: async () => {
+            // 停止正在播放的录音（如果在删除列表中）
+            if (playingId && selectedIds.has(playingId)) {
+              audioService.stopPlayback()
+              setPlayingId(null)
+            }
+
+            // 删除选中的录音文件
+            for (const id of selectedIds) {
+              const recording = recordings.find(r => r.id === id)
+              if (recording) {
+                await deleteRecordingFiles(recording)
+              }
+            }
+
+            // 更新列表
+            const updatedList = recordings.filter(r => !selectedIds.has(r.id))
+            await saveRecordings(updatedList)
+            setRecordings(updatedList)
+
+            // 退出选择模式
+            setSelectedIds(new Set())
+            setIsSelectionMode(false)
+          }
+        }
+      ]
+    )
+  }
+
+  // 退出选择模式
+  const exitSelectionMode = () => {
+    setSelectedIds(new Set())
+    setIsSelectionMode(false)
+  }
+
   // 格式化时长
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)
@@ -99,11 +187,32 @@ export function RecordingsScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>◀ 返回</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>📂 我的录音</Text>
-        <View style={{ width: 60 }} />
+        {isSelectionMode ? (
+          <>
+            <TouchableOpacity onPress={exitSelectionMode}>
+              <Text style={styles.backButton}>取消</Text>
+            </TouchableOpacity>
+            <Text style={styles.title}>已选 {selectedIds.size} 个</Text>
+            <TouchableOpacity onPress={toggleSelectAll}>
+              <Text style={styles.backButton}>
+                {selectedIds.size === recordings.length ? '全不选' : '全选'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+              <Text style={styles.backButton}>◀ 返回</Text>
+            </TouchableOpacity>
+            <Text style={styles.title}>📂 我的录音</Text>
+            {recordings.length > 0 && (
+              <TouchableOpacity onPress={() => setIsSelectionMode(true)}>
+                <Text style={styles.backButton}>选择</Text>
+              </TouchableOpacity>
+            )}
+            {recordings.length === 0 && <View style={{ width: 60 }} />}
+          </>
+        )}
       </View>
 
       {recordings.length === 0 ? (
@@ -113,39 +222,61 @@ export function RecordingsScreen({ navigation }: any) {
       ) : (
         <ScrollView style={styles.list}>
           {recordings.map((recording) => (
-            <View key={recording.id} style={styles.item}>
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemName}>♪ {recording.name}</Text>
-                <Text style={styles.itemMeta}>
-                  时长: {formatDuration(recording.duration)}
-                  {recording.fileSize > 0 && ` · ${formatFileSize(recording.fileSize)}`}
-                </Text>
-              </View>
+            <View key={recording.id} style={[
+              styles.item,
+              isSelectionMode && selectedIds.has(recording.id) && styles.itemSelected
+            ]}>
+              <TouchableOpacity
+                style={styles.itemContent}
+                onPress={() => isSelectionMode && toggleSelection(recording.id)}
+                activeOpacity={isSelectionMode ? 0.7 : 1}
+              >
+                {isSelectionMode && (
+                  <View style={[
+                    styles.checkbox,
+                    selectedIds.has(recording.id) && styles.checkboxSelected
+                  ]}>
+                    {selectedIds.has(recording.id) && (
+                      <Text style={styles.checkmark}>✓</Text>
+                    )}
+                  </View>
+                )}
 
-              <View style={styles.itemActions}>
-                <TouchableOpacity
-                  style={[styles.actionButton, playingId === recording.id && styles.playingButton]}
-                  onPress={() => playRecording(recording)}
-                >
-                  <Text style={styles.actionButtonText}>
-                    {playingId === recording.id ? '⏸' : '▶'}
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemName}>♪ {recording.name}</Text>
+                  <Text style={styles.itemMeta}>
+                    时长: {formatDuration(recording.duration)}
+                    {recording.fileSize > 0 && ` · ${formatFileSize(recording.fileSize)}`}
                   </Text>
-                </TouchableOpacity>
+                </View>
 
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => shareRecording(recording)}
-                >
-                  <Text style={styles.actionButtonText}>↗</Text>
-                </TouchableOpacity>
+                {!isSelectionMode && (
+                  <View style={styles.itemActions}>
+                    <TouchableOpacity
+                      style={[styles.actionButton, playingId === recording.id && styles.playingButton]}
+                      onPress={() => playRecording(recording)}
+                    >
+                      <Text style={styles.actionButtonText}>
+                        {playingId === recording.id ? '⏸' : '▶'}
+                      </Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.deleteButton]}
-                  onPress={() => deleteRecording(recording)}
-                >
-                  <Text style={styles.actionButtonText}>✕</Text>
-                </TouchableOpacity>
-              </View>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => shareRecording(recording)}
+                    >
+                      <Text style={styles.actionButtonText}>↗</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.deleteButton]}
+                      onPress={() => deleteRecording(recording)}
+                    >
+                      <Text style={styles.actionButtonText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </TouchableOpacity>
 
               {playingId === recording.id && (
                 <View style={styles.progressBar}>
@@ -155,6 +286,17 @@ export function RecordingsScreen({ navigation }: any) {
             </View>
           ))}
         </ScrollView>
+      )}
+
+      {isSelectionMode && selectedIds.size > 0 && (
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            style={[styles.bottomBarButton, styles.deleteAllButton]}
+            onPress={deleteSelected}
+          >
+            <Text style={styles.bottomBarButtonText}>删除选中 ({selectedIds.size})</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </SafeAreaView>
   )
@@ -199,6 +341,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee'
   },
+  itemSelected: {
+    backgroundColor: '#E3F2FD'
+  },
+  itemContent: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: '#007AFF',
+    borderRadius: 4,
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  checkboxSelected: {
+    backgroundColor: '#007AFF'
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold'
+  },
   itemInfo: {
     flex: 1,
     marginBottom: 8
@@ -241,5 +408,24 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     backgroundColor: '#007AFF'
+  },
+  bottomBar: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    backgroundColor: '#fff'
+  },
+  bottomBarButton: {
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center'
+  },
+  deleteAllButton: {
+    backgroundColor: '#FF3B30'
+  },
+  bottomBarButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500'
   }
 })
