@@ -512,7 +512,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    minHeight: 70
+    minHeight: 70,
+    flexShrink: 0
   },
   controlButton: {
     paddingHorizontal: 32,
