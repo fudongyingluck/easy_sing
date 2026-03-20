@@ -222,7 +222,7 @@ export function RecordingsScreen({ navigation }: any) {
           <Text style={styles.emptyText}>暂无录音</Text>
         </View>
       ) : (
-        <ScrollView style={styles.list}>
+        <ScrollView style={styles.list} showsVerticalScrollIndicator={true}>
           {recordings.map((recording) => (
             <View key={recording.id} style={[
               styles.item,
