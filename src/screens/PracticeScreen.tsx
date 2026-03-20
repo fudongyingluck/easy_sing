@@ -295,7 +295,7 @@ export function PracticeScreen() {
             onPress={() => setPianoExpanded(!pianoExpanded)}
           >
             <Text style={styles.pianoHeaderText}>
-              {pianoExpanded ? '▼' : '▲'} 虚拟钢琴（{currentMode.startNote} ~ {currentMode.endNote}）
+              {pianoExpanded ? '▼' : '▲'} 虚拟钢琴（{currentMode.name}）
             </Text>
           </TouchableOpacity>
 

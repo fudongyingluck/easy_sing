@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, PanGestureHandler } from 'react-native'
 import { CONFIG } from '../config/constants'
 import { noteNameToMidi, midiToNoteName, noteNameToFreq } from '../utils/noteUtils'
 
@@ -19,7 +19,10 @@ export function Piano({ startNote, endNote, disabled = false, onKeyPress }: Pian
   const [scrollOffset, setScrollOffset] = useState(0)
   const [contentWidth, setContentWidth] = useState(0)
   const [scrollViewWidth, setScrollViewWidth] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
   const scrollViewRef = useRef<ScrollView>(null)
+  const dragStartX = useRef(0)
+  const dragStartScrollOffset = useRef(0)
 
   // 生成琴键列表
   const generateKeys = () => {
@@ -83,7 +86,9 @@ export function Piano({ startNote, endNote, disabled = false, onKeyPress }: Pian
   }
 
   const handleScroll = (event: any) => {
-    setScrollOffset(event.nativeEvent.contentOffset.x)
+    if (!isDragging) {
+      setScrollOffset(event.nativeEvent.contentOffset.x)
+    }
   }
 
   const handleContentSizeChange = (width: number) => {
@@ -92,6 +97,34 @@ export function Piano({ startNote, endNote, disabled = false, onKeyPress }: Pian
 
   const handleLayout = (event: any) => {
     setScrollViewWidth(event.nativeEvent.layout.width)
+  }
+
+  // 滚动条拖拽开始
+  const handleScrollBarTouchStart = (event: any) => {
+    setIsDragging(true)
+    dragStartX.current = event.nativeEvent.pageX
+    dragStartScrollOffset.current = scrollOffset
+  }
+
+  // 滚动条拖拽移动
+  const handleScrollBarTouchMove = (event: any) => {
+    if (!isDragging || trackWidth <= 0 || contentWidth <= 0) return
+
+    const deltaX = event.nativeEvent.pageX - dragStartX.current
+    const maxScrollOffset = contentWidth - scrollViewWidth
+    const maxThumbOffset = trackWidth - scrollBarWidth
+
+    if (maxThumbOffset > 0) {
+      const newScrollOffset = dragStartScrollOffset.current + (deltaX / maxThumbOffset) * maxScrollOffset
+      const clampedScrollOffset = Math.max(0, Math.min(maxScrollOffset, newScrollOffset))
+      setScrollOffset(clampedScrollOffset)
+      scrollViewRef.current?.scrollTo({ x: clampedScrollOffset, animated: false })
+    }
+  }
+
+  // 滚动条拖拽结束
+  const handleScrollBarTouchEnd = () => {
+    setIsDragging(false)
   }
 
   // 是否需要显示滚动条
@@ -105,7 +138,7 @@ export function Piano({ startNote, endNote, disabled = false, onKeyPress }: Pian
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, { width: totalPianoWidth }]}
-        scrollEnabled={true}
+        scrollEnabled={!isDragging}
         bounces={true}
         alwaysBounceHorizontal={true}
         onScroll={handleScroll}
@@ -170,8 +203,13 @@ export function Piano({ startNote, endNote, disabled = false, onKeyPress }: Pian
                 {
                   width: scrollBarWidth,
                   left: scrollBarLeft
-                }
+                },
+                isDragging && styles.scrollBarThumbDragging
               ]}
+              onTouchStart={handleScrollBarTouchStart}
+              onTouchMove={handleScrollBarTouchMove}
+              onTouchEnd={handleScrollBarTouchEnd}
+              onTouchCancel={handleScrollBarTouchEnd}
             />
           </View>
         </View>
@@ -257,5 +295,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: SCROLL_BAR_HEIGHT / 2,
     opacity: 0.8
+  },
+  scrollBarThumbDragging: {
+    opacity: 1
   }
 })
