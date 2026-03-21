@@ -2081,6 +2081,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - RNVectorIcons (9.2.0):
+    - React-Core
   - Yoga (0.0.0)
 
 DEPENDENCIES:
@@ -2163,6 +2165,7 @@ DEPENDENCIES:
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSound (from `../node_modules/react-native-sound`)
   - RNSVG (from `../node_modules/react-native-svg`)
+  - RNVectorIcons (from `../node_modules/react-native-vector-icons`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
 EXTERNAL SOURCES:
@@ -2323,6 +2326,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-sound"
   RNSVG:
     :path: "../node_modules/react-native-svg"
+  RNVectorIcons:
+    :path: "../node_modules/react-native-vector-icons"
   Yoga:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
@@ -2405,6 +2410,7 @@ SPEC CHECKSUMS:
   RNScreens: b3d6c487978d6162f08788aca293da8780b0fd2d
   RNSound: 25cfdc38a1353362053c01ca827d7ddf80860de1
   RNSVG: 51d2da73c069e577e84a687e38746e45dfce1632
+  RNVectorIcons: 5784330be9dddb5474e8b378d5f6947996c84e55
   Yoga: c0b3f2c7e8d3e327e450223a2414ca3fa296b9a2
 
 PODFILE CHECKSUM: 43532ee0e98059789bfdc4d594d9506313a7ac9c

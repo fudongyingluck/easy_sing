@@ -37,20 +37,29 @@ export function PracticeScreen() {
     loadData()
   }, [])
 
-  // 双击音域区切换模式
-  const handleRangeAreaTap = () => {
+  // 双击处理（音域区或钢琴区域）
+  const handleDoubleTap = () => {
     const currentTime = Date.now()
     const timeDiff = currentTime - lastTapTimeRef.current
 
     if (timeDiff < CONFIG.DOUBLE_TAP_DELAY && timeDiff > 0) {
       // 检测到双击
-      toggleAppMode()
+      if (recordingState === 'recording') {
+        // 正在录音时，只暂停录音（和暂停按钮效果一样）
+        pauseRecording()
+      } else {
+        // 不在录音时，切换模式
+        toggleAppMode()
+      }
       lastTapTimeRef.current = 0
     } else {
       // 记录点击时间
       lastTapTimeRef.current = currentTime
     }
   }
+
+  // 双击音域区
+  const handleRangeAreaTap = handleDoubleTap
 
   const toggleAppMode = useCallback(() => {
     if (appMode === 'recording') {
@@ -312,7 +321,11 @@ export function PracticeScreen() {
                 onKeyPress={handlePianoKeyPress}
               />
               {appMode === 'recording' && recordingState === 'recording' && (
-                <View style={styles.pianoDisabledHintOverlay}>
+                <TouchableOpacity
+                  style={styles.pianoDisabledHintOverlay}
+                  onPress={handleDoubleTap}
+                  activeOpacity={1}
+                >
                   <View style={styles.pianoDisabledHint}>
                     <Text style={styles.pianoDisabledHintText}>
                       [R] 录音中
@@ -321,7 +334,7 @@ export function PracticeScreen() {
                       双击暂停录音，激活钢琴
                     </Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               )}
             </View>
           )}
