@@ -1,6 +1,16 @@
 import { PitchData, PitchDataPoint } from '../types'
 import { CONFIG } from '../config/constants'
 import { midiToNoteName } from '../utils/noteUtils'
+import { Platform } from 'react-native'
+
+// 检测是否是模拟器
+const isSimulator = (): boolean => {
+  if (Platform.OS === 'ios') {
+    const isSim = Platform.constants?.isTesting || false
+    return isSim
+  }
+  return true
+}
 
 const MAX_RECORDING_DURATION = CONFIG.MAX_RECORDING_DURATION
 
@@ -15,8 +25,8 @@ export class AudioService {
   private onPitchDataUpdate: ((data: PitchDataPoint[]) => void) | null = null
   private onMaxDurationReached: (() => void) | null = null
 
-  private updateInterval: any = null
   private maxDurationInterval: any = null
+  private updateInterval: any = null
 
   setOnPitchDataUpdate(callback: ((data: PitchDataPoint[]) => void) | null) {
     this.onPitchDataUpdate = callback
@@ -27,7 +37,6 @@ export class AudioService {
   }
 
   async startRecording(): Promise<string> {
-    // 确保先停止之前的
     this.stopAllIntervals()
 
     this.recordingId = `rec_${Date.now()}`
@@ -37,11 +46,38 @@ export class AudioService {
     this.isRecording = true
     this.isPaused = false
 
-    this.startUpdateLoop()
-    this.startMaxDurationCheck()
+    console.log('Starting recording (using simulated data for now)')
+    this.startSimulatedRecording()
 
+    this.startMaxDurationCheck()
     console.log('Recording started')
     return this.recordingId
+  }
+
+  private startSimulatedRecording(): void {
+    console.log('Starting simulated recording...')
+    const interval = 1000 / CONFIG.PITCH_DATA_SAMPLE_RATE
+
+    this.updateInterval = setInterval(() => {
+      if (!this.isRecording || this.isPaused) {
+        return
+      }
+
+      const time = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
+      const simulatedFreq = 261.63 + Math.sin(time * 2) * 50
+      const midi = Math.round(12 * Math.log2(simulatedFreq / 440) + 69)
+      const note = midiToNoteName(midi)
+
+      this.pitchData.push({
+        time,
+        freq: simulatedFreq,
+        note
+      })
+
+      if (this.onPitchDataUpdate) {
+        this.onPitchDataUpdate([...this.pitchData])
+      }
+    }, interval)
   }
 
   async pauseRecording(): Promise<void> {
@@ -80,33 +116,6 @@ export class AudioService {
     }
   }
 
-  private startUpdateLoop() {
-    const interval = 1000 / CONFIG.PITCH_DATA_SAMPLE_RATE
-
-    this.updateInterval = setInterval(() => {
-      if (!this.isRecording || this.isPaused) {
-        return
-      }
-
-      const time = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
-
-      // 模拟音高数据
-      const simulatedFreq = 261.63 + Math.sin(time * 2) * 50
-      const midi = Math.round(12 * Math.log2(simulatedFreq / 440) + 69)
-      const note = midiToNoteName(midi)
-
-      this.pitchData.push({
-        time,
-        freq: simulatedFreq,
-        note
-      })
-
-      if (this.onPitchDataUpdate) {
-        this.onPitchDataUpdate([...this.pitchData])
-      }
-    }, interval)
-  }
-
   private startMaxDurationCheck() {
     this.maxDurationInterval = setInterval(() => {
       if (!this.isRecording || this.isPaused) {
@@ -125,13 +134,10 @@ export class AudioService {
   }
 
   private stopAllIntervals() {
+    this.stopMaxDurationCheck()
     if (this.updateInterval) {
       clearInterval(this.updateInterval)
       this.updateInterval = null
-    }
-    if (this.maxDurationInterval) {
-      clearInterval(this.maxDurationInterval)
-      this.maxDurationInterval = null
     }
   }
 
