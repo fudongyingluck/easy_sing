@@ -111,7 +111,8 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
     }
   }, [minMidi, maxMidi, initialScrollDone, svgHeight, visibleHeight])
 
-  const latestTime = currentTime ?? (data.length > 0 ? data[data.length - 1].time : 0)
+  const dataLatestTime = data.length > 0 ? data[data.length - 1].time : 0
+  const latestTime = Math.max(currentTime ?? 0, dataLatestTime)
   const now = Math.max(duration, latestTime - timeOffset)
   const startTime = Math.max(0, now - duration)
   const filteredData = data.filter(p => p.time >= startTime && p.time <= now && p.freq > 0)

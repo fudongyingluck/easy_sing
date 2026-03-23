@@ -1,7 +1,6 @@
 import { PitchData, PitchDataPoint } from '../types'
 import { CONFIG } from '../config/constants'
 import { midiToNoteName } from '../utils/noteUtils'
-import { Platform } from 'react-native'
 import Pitchy from 'react-native-pitchy'
 
 const MAX_RECORDING_DURATION = CONFIG.MAX_RECORDING_DURATION
@@ -16,10 +15,8 @@ export class AudioService {
   private isPaused: boolean = false
   private onPitchDataUpdate: ((data: PitchDataPoint[]) => void) | null = null
   private onMaxDurationReached: (() => void) | null = null
-  private onDebugInfo: ((info: string) => void) | null = null
 
   private pitchSubscription: any = null
-  private simulatedInterval: any = null
   private maxDurationInterval: any = null
 
   setOnPitchDataUpdate(callback: ((data: PitchDataPoint[]) => void) | null) {
@@ -30,13 +27,8 @@ export class AudioService {
     this.onMaxDurationReached = callback
   }
 
-  setOnDebugInfo(callback: ((info: string) => void) | null) {
-    this.onDebugInfo = callback
-  }
-
   async startRecording(): Promise<string> {
-    console.log('[AudioService] startRecording called')
-    this.stopAllIntervals()
+    this.stopAll()
 
     this.recordingId = `rec_${Date.now()}`
     this.pitchData = []
@@ -45,59 +37,39 @@ export class AudioService {
     this.isRecording = true
     this.isPaused = false
 
-    if (Platform.OS === 'ios') {
-      try {
-        await this.startPitchy()
-      } catch (error) {
-        console.error('[AudioService] Pitchy failed, falling back:', error)
-        this.startSimulatedRecording()
-      }
-    } else {
-      this.startSimulatedRecording()
-    }
-
-    this.startMaxDurationCheck()
-    return this.recordingId
-  }
-
-  private async startPitchy(): Promise<void> {
     Pitchy.init({ bufferSize: 2048, minVolume: -50 })
-
     this.pitchSubscription = Pitchy.addListener(({ pitch }: { pitch: number }) => {
       if (!this.isRecording || this.isPaused) return
       if (pitch < 60 || pitch > 1400) return
-      this.processPitchResult(pitch)
+
+      const time = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
+      const midi = Math.round(12 * Math.log2(pitch / 440) + 69)
+      const note = midiToNoteName(midi)
+      this.pitchData.push({ time, freq: pitch, note })
+
+      const maxPoints = CONFIG.PITCH_DATA_SAMPLE_RATE * MAX_RECORDING_DURATION
+      if (this.pitchData.length > maxPoints) {
+        this.pitchData = this.pitchData.slice(-maxPoints)
+      }
+
+      if (this.onPitchDataUpdate) {
+        this.onPitchDataUpdate([...this.pitchData])
+      }
     })
 
-    const started = await Pitchy.start()
-    if (!started) throw new Error('Pitchy.start() returned false')
-    console.log('[Pitchy] Started')
-  }
+    await Pitchy.start()
 
-  private processPitchResult(freq: number): void {
-    const time = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
-    const midi = Math.round(12 * Math.log2(freq / 440) + 69)
-    const note = midiToNoteName(midi)
-
-    this.pitchData.push({ time, freq, note })
-
-    const maxPoints = CONFIG.PITCH_DATA_SAMPLE_RATE * MAX_RECORDING_DURATION
-    if (this.pitchData.length > maxPoints) {
-      this.pitchData = this.pitchData.slice(-maxPoints)
-    }
-
-    if (this.onPitchDataUpdate) {
-      this.onPitchDataUpdate([...this.pitchData])
-    }
-  }
-
-  private startSimulatedRecording(): void {
-    const interval = 1000 / CONFIG.PITCH_DATA_SAMPLE_RATE
-    this.simulatedInterval = setInterval(() => {
+    this.maxDurationInterval = setInterval(() => {
       if (!this.isRecording || this.isPaused) return
-      const time = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
-      this.processPitchResult(261.63 + Math.sin(time * 2) * 50)
-    }, interval)
+      const d = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
+      if (d >= MAX_RECORDING_DURATION) {
+        if (this.onMaxDurationReached) this.onMaxDurationReached()
+        clearInterval(this.maxDurationInterval)
+        this.maxDurationInterval = null
+      }
+    }, 1000)
+
+    return this.recordingId
   }
 
   async pauseRecording(): Promise<void> {
@@ -115,15 +87,9 @@ export class AudioService {
   }
 
   async stopRecording(): Promise<{ audioPath: string; duration: number; pitchData: PitchData }> {
-    this.stopAllIntervals()
+    this.stopAll()
     this.isRecording = false
     this.isPaused = false
-
-    if (this.pitchSubscription) {
-      this.pitchSubscription.remove()
-      this.pitchSubscription = null
-    }
-    try { await Pitchy.stop() } catch {}
 
     const duration = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
     return {
@@ -138,29 +104,15 @@ export class AudioService {
     }
   }
 
-  private startMaxDurationCheck() {
-    this.maxDurationInterval = setInterval(() => {
-      if (!this.isRecording || this.isPaused) return
-      const d = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
-      if (d >= MAX_RECORDING_DURATION) {
-        if (this.onMaxDurationReached) this.onMaxDurationReached()
-        this.stopMaxDurationCheck()
-      }
-    }, 1000)
-  }
-
-  private stopMaxDurationCheck() {
+  private stopAll() {
+    if (this.pitchSubscription) {
+      this.pitchSubscription.remove()
+      this.pitchSubscription = null
+    }
+    try { Pitchy.stop() } catch {}
     if (this.maxDurationInterval) {
       clearInterval(this.maxDurationInterval)
       this.maxDurationInterval = null
-    }
-  }
-
-  private stopAllIntervals() {
-    this.stopMaxDurationCheck()
-    if (this.simulatedInterval) {
-      clearInterval(this.simulatedInterval)
-      this.simulatedInterval = null
     }
   }
 
