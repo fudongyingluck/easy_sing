@@ -30,7 +30,7 @@ export const CONFIG = {
   YIN_CONFIDENCE_THRESHOLD: 0.85,
 
   // 音频模式配置
-  FORCE_REAL_AUDIO: false,         // 设置为 true 可以在模拟器上尝试使用真实麦克风
+  FORCE_REAL_AUDIO: true,         // 设置为 true 可以在模拟器上尝试使用真实麦克风
 } as const
 
 // 预设音域模式

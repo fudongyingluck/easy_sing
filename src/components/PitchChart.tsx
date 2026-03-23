@@ -15,9 +15,10 @@ interface PitchChartProps {
   maxNote: string
   duration?: number // 显示最近多少秒
   height?: number // 固定高度
+  currentTime?: number // 当前录音时刻（秒），用于推移横坐标
 }
 
-export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_CHART_DURATION, height }: PitchChartProps) {
+export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_CHART_DURATION, height, currentTime }: PitchChartProps) {
   const scrollViewRef = useRef<ScrollView>(null)
   const [initialScrollDone, setInitialScrollDone] = useState(false)
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
@@ -56,8 +57,8 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
     }
   }, [minMidi, maxMidi, initialScrollDone, scrollContentHeight, visibleHeight])
 
-  // 筛选最近duration秒的数据
-  const now = data.length > 0 ? data[data.length - 1].time : 0
+  // 使用 currentTime（实时推移）或最后数据点时间
+  const now = currentTime ?? (data.length > 0 ? data[data.length - 1].time : 0)
   const startTime = Math.max(0, now - duration)
   const filteredData = data.filter(p => p.time >= startTime)
 
@@ -92,11 +93,10 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
     return `${seconds}`
   }
 
-  // 生成X轴标签（时间）- 显示绝对时间，整数秒
+  // 生成X轴标签（时间）- 只生成可视范围内的整数秒
   const xAxisLabels = []
-  for (let t = 0; t <= duration; t += 1) {
-    const time = Math.floor(startTime) + t
-    xAxisLabels.push(time)
+  for (let t = Math.ceil(startTime); t <= startTime + duration; t += 1) {
+    xAxisLabels.push(t)
   }
 
   // 生成路径数据
@@ -113,9 +113,15 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
     }
   }
 
-  // 生成路径字符串
+  // 生成路径字符串，时间间隔超过 0.3s 则断开（沉默段不连线）
+  const GAP_THRESHOLD = 0.3
   const path = pathData.length > 1
-    ? pathData.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
+    ? pathData.map((p, i) => {
+        if (i === 0) return `M ${p.x} ${p.y}`
+        const timeDiff = filteredData[i]?.time - filteredData[i - 1]?.time
+        const cmd = (timeDiff > GAP_THRESHOLD) ? 'M' : 'L'
+        return `${cmd} ${p.x} ${p.y}`
+      }).join(' ')
     : ''
 
   // 是否需要滚动

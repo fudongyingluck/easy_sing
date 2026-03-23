@@ -6,11 +6,15 @@ export class YINDetector {
   private threshold: number
   private confidenceThreshold: number
 
-  constructor() {
-    this.sampleRate = CONFIG.YIN_SAMPLE_RATE
+  constructor(sampleRate?: number) {
+    this.sampleRate = sampleRate ?? CONFIG.YIN_SAMPLE_RATE
     this.bufferSize = CONFIG.YIN_BUFFER_SIZE
     this.threshold = CONFIG.YIN_THRESHOLD
     this.confidenceThreshold = CONFIG.YIN_CONFIDENCE_THRESHOLD
+  }
+
+  setSampleRate(sampleRate: number) {
+    this.sampleRate = sampleRate
   }
 
   // 计算 YIN 算法检测音高

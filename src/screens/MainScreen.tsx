@@ -20,12 +20,17 @@ export function MainScreen({ navigation }: any) {
   const [recordingId, setRecordingId] = useState<string | null>(null)
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [pitchData, setPitchData] = useState<any[]>([])
+  const [debugInfo, setDebugInfo] = useState('')
   const [recordingTime, setRecordingTime] = useState(0)
+  const [chartCurrentTime, setChartCurrentTime] = useState(0)
+  const chartTimeRef = useRef<any>(null)
   const [pianoExpanded, setPianoExpanded] = useState(true)
   const [hasSavedRecording, setHasSavedRecording] = useState(false)
 
   const recordingTimerRef = useRef<any>(null)
   const lastTapTimeRef = useRef<number>(0)
+  const chartPausedTimeRef = useRef<number>(0)
+  const chartStartTsRef = useRef<number>(0)
 
   // 加载用户设置
   const loadSettings = async () => {
@@ -83,8 +88,12 @@ export function MainScreen({ navigation }: any) {
       setPitchData([])
 
       // 设置音高数据更新回调
+      audioService.setOnDebugInfo((info) => {
+        setDebugInfo(info)
+      })
       audioService.setOnPitchDataUpdate((data) => {
         setPitchData(data)
+        setDebugInfo(`pts=${data.length} ${data[data.length-1]?.freq?.toFixed(0)}Hz`)
       })
 
       // 设置最大时长到达回调
@@ -96,11 +105,19 @@ export function MainScreen({ navigation }: any) {
       setRecordingId(id)
       setRecordingState('recording')
       setRecordingTime(0)
+      setChartCurrentTime(0)
 
       // 启动录音计时
+      const startTs = Date.now()
       recordingTimerRef.current = setInterval(() => {
         setRecordingTime(t => t + 1)
       }, 1000)
+      // 精确图表时间（50ms 精度，与 UI 更新同步）
+      chartStartTsRef.current = startTs
+      chartPausedTimeRef.current = 0
+      chartTimeRef.current = setInterval(() => {
+        setChartCurrentTime((Date.now() - startTs) / 1000)
+      }, 50)
     } catch (error) {
       console.error('Failed to start recording:', error)
     }
@@ -112,6 +129,11 @@ export function MainScreen({ navigation }: any) {
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current)
         recordingTimerRef.current = null
+      }
+      if (chartTimeRef.current) {
+        clearInterval(chartTimeRef.current)
+        chartTimeRef.current = null
+        chartPausedTimeRef.current = (Date.now() - chartStartTsRef.current) / 1000
       }
       await audioService.pauseRecording()
       setRecordingState('paused')
@@ -130,6 +152,12 @@ export function MainScreen({ navigation }: any) {
       recordingTimerRef.current = setInterval(() => {
         setRecordingTime(t => t + 1)
       }, 1000)
+      // 从暂停时刻继续图表时间
+      const resumeTs = Date.now()
+      const pausedAt = chartPausedTimeRef.current
+      chartTimeRef.current = setInterval(() => {
+        setChartCurrentTime(pausedAt + (Date.now() - resumeTs) / 1000)
+      }, 50)
     } catch (error) {
       console.error('Failed to resume recording:', error)
     }
@@ -142,6 +170,11 @@ export function MainScreen({ navigation }: any) {
         clearInterval(recordingTimerRef.current)
         recordingTimerRef.current = null
       }
+      if (chartTimeRef.current) {
+        clearInterval(chartTimeRef.current)
+        chartTimeRef.current = null
+      }
+      setChartCurrentTime(0)
 
       // 清除音高数据回调
       audioService.setOnPitchDataUpdate(null)
@@ -191,6 +224,11 @@ export function MainScreen({ navigation }: any) {
         clearInterval(recordingTimerRef.current)
         recordingTimerRef.current = null
       }
+      if (chartTimeRef.current) {
+        clearInterval(chartTimeRef.current)
+        chartTimeRef.current = null
+      }
+      setChartCurrentTime(0)
 
       // 清除音高数据回调
       audioService.setOnPitchDataUpdate(null)
@@ -247,6 +285,7 @@ export function MainScreen({ navigation }: any) {
         {/* 音高曲线图 - 录音模式显示 */}
         {appMode === 'recording' && (
           <View style={styles.chartContainer}>
+            {debugInfo ? <Text style={{color:'yellow',fontSize:11,textAlign:'center'}}>{debugInfo}</Text> : null}
             <PitchChart
               key={`${currentMode.startNote}-${currentMode.endNote}`}
               data={pitchData}
@@ -254,6 +293,7 @@ export function MainScreen({ navigation }: any) {
               maxNote={currentMode.endNote}
               duration={CONFIG.DEFAULT_CHART_DURATION}
               height={SCREEN_HEIGHT * 5 / 12}
+              currentTime={chartCurrentTime > 0 ? chartCurrentTime : undefined}
             />
           </View>
         )}
