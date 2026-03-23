@@ -1,21 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native'
-import Svg, { Line, Text as SvgText, Path } from 'react-native-svg'
+import Svg, { Line, Text as SvgText, Path, Circle } from 'react-native-svg'
 import { PitchDataPoint } from '../types'
 import { noteNameToMidi, midiToNoteName } from '../utils/noteUtils'
 import { CONFIG } from '../config/constants'
 
 const PADDING = { top: 10, bottom: 30, left: 5, right: 10 }
-const X_AXIS_HEIGHT = 30 // 横坐标区域高度
-const pixelsPerSemitone = 20 // 每个半音20像素
+const X_AXIS_HEIGHT = 30
+const pixelsPerSemitone = 20
+
+// Two consecutive points are "connected" (draw line) if:
+//   - time gap < 0.15 s  AND
+//   - pitch difference < 2 semitones
+const LINE_TIME_GAP = 0.15
+const LINE_SEMITONE_GAP = 2
 
 interface PitchChartProps {
   data: PitchDataPoint[]
   minNote: string
   maxNote: string
-  duration?: number // 显示最近多少秒
-  height?: number // 固定高度
-  currentTime?: number // 当前录音时刻（秒），用于推移横坐标
+  duration?: number
+  height?: number
+  currentTime?: number
 }
 
 export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_CHART_DURATION, height, currentTime }: PitchChartProps) {
@@ -23,31 +29,24 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
   const [initialScrollDone, setInitialScrollDone] = useState(false)
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
 
-  // 计算MIDI范围
   const minMidi = noteNameToMidi(minNote)
   const maxMidi = noteNameToMidi(maxNote)
   const midiRange = maxMidi - minMidi
 
-  // 计算图表尺寸
   const chartWidth = windowWidth - PADDING.left - PADDING.right
   const svgHeight = midiRange * pixelsPerSemitone + PADDING.top + PADDING.bottom
   const chartHeight = height || (windowHeight * 5 / 12)
   const scrollContentHeight = Math.max(chartHeight - X_AXIS_HEIGHT, svgHeight)
   const visibleHeight = chartHeight - X_AXIS_HEIGHT
 
-  // 坐标转换
   const getMidiY = (midi: number) => {
     const normalized = (midi - minMidi) / midiRange
     return PADDING.top + (1 - normalized) * (svgHeight - PADDING.top - PADDING.bottom)
   }
 
-  const midiToY = getMidiY
-
-  // 初始滚动到音域的中间位置
   useEffect(() => {
     if (!initialScrollDone && scrollViewRef.current && scrollContentHeight > visibleHeight) {
       setTimeout(() => {
-        // 计算中间位置
         const centerMidi = minMidi + midiRange / 2
         const centerY = getMidiY(centerMidi)
         const scrollY = Math.max(0, centerY - visibleHeight / 2)
@@ -57,157 +56,156 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
     }
   }, [minMidi, maxMidi, initialScrollDone, scrollContentHeight, visibleHeight])
 
-  // 使用 currentTime（实时推移）或最后数据点时间
   const now = currentTime ?? (data.length > 0 ? data[data.length - 1].time : 0)
   const startTime = Math.max(0, now - duration)
-  const filteredData = data.filter(p => p.time >= startTime)
+  const filteredData = data.filter(p => p.time >= startTime && p.freq > 0)
 
-  // 坐标转换
-  const timeToX = (time: number) => {
-    const relativeTime = time - startTime
-    return PADDING.left + (relativeTime / duration) * chartWidth
-  }
+  const timeToX = (time: number) =>
+    PADDING.left + ((time - startTime) / duration) * chartWidth
 
-  // 生成Y轴标签（音符）- 放在内侧（只标白键）
+  const freqToMidi = (freq: number) => 12 * Math.log2(freq / 440) + 69
+
+  // Y-axis labels (white keys only)
   const yAxisLabels = []
   for (let midi = minMidi; midi <= maxMidi; midi++) {
     const noteName = midiToNoteName(midi)
-    if (!noteName.includes('#')) { // 只标白键
-      yAxisLabels.push({ midi, note: noteName })
-    }
+    if (!noteName.includes('#')) yAxisLabels.push({ midi, note: noteName })
   }
 
-  // 生成所有半音的横线（包括黑键）
+  // All semitone grid lines
   const allMidiLines = []
-  for (let midi = minMidi; midi <= maxMidi; midi++) {
-    allMidiLines.push(midi)
-  }
+  for (let midi = minMidi; midi <= maxMidi; midi++) allMidiLines.push(midi)
 
-  // 格式化时间显示
-  const formatTimeLabel = (seconds: number): string => {
-    if (seconds >= 60) {
-      const mins = Math.floor(seconds / 60)
-      const secs = seconds % 60
-      return `${mins}:${secs.toString().padStart(2, '0')}`
-    }
-    return `${seconds}`
-  }
-
-  // 生成X轴标签（时间）- 只生成可视范围内的整数秒
+  // X-axis labels
   const xAxisLabels = []
-  for (let t = Math.ceil(startTime); t <= startTime + duration; t += 1) {
-    xAxisLabels.push(t)
+  for (let t = Math.ceil(startTime); t <= startTime + duration; t++) xAxisLabels.push(t)
+
+  const formatTimeLabel = (s: number) => {
+    if (s >= 60) return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
+    return `${s}`
   }
 
-  // 生成路径数据
-  const pathData = []
-  for (let i = 0; i < filteredData.length; i++) {
-    const point = filteredData[i]
-    if (point.freq > 0) {
-      const midi = Math.round(12 * Math.log2(point.freq / 440) + 69)
-      if (midi >= minMidi && midi <= maxMidi) {
-        const x = timeToX(point.time)
-        const y = midiToY(midi)
-        pathData.push({ x, y })
+  // Build render primitives: classify each point as dot or part of a line segment
+  // A "segment" is a run of consecutive points that are all "connected"
+  type Dot = { x: number; y: number }
+  type Segment = { points: Array<{ x: number; y: number }> }
+
+  const dots: Dot[] = []
+  const segments: Segment[] = []
+
+  if (filteredData.length > 0) {
+    let currentSegment: Array<{ x: number; y: number }> | null = null
+
+    for (let i = 0; i < filteredData.length; i++) {
+      const p = filteredData[i]
+      const midi = freqToMidi(p.freq)
+      if (midi < minMidi || midi > maxMidi) continue
+
+      const x = timeToX(p.time)
+      const y = getMidiY(midi)
+
+      if (i === 0) {
+        currentSegment = [{ x, y }]
+        continue
+      }
+
+      const prev = filteredData[i - 1]
+      const prevMidi = freqToMidi(prev.freq)
+      const timeDiff = p.time - prev.time
+      const midiDiff = Math.abs(midi - prevMidi)
+
+      const connected = timeDiff < LINE_TIME_GAP && midiDiff < LINE_SEMITONE_GAP
+
+      if (connected) {
+        currentSegment!.push({ x, y })
+      } else {
+        // Flush current segment
+        if (currentSegment && currentSegment.length >= 3) {
+          segments.push({ points: currentSegment })
+        } else if (currentSegment) {
+          dots.push(...currentSegment)
+        }
+        currentSegment = [{ x, y }]
       }
     }
+
+    // Flush last segment
+    if (currentSegment && currentSegment.length >= 3) {
+      segments.push({ points: currentSegment })
+    } else if (currentSegment) {
+      dots.push(...currentSegment)
+    }
   }
 
-  // 生成路径字符串，时间间隔超过 0.3s 则断开（沉默段不连线）
-  const GAP_THRESHOLD = 0.3
-  const path = pathData.length > 1
-    ? pathData.map((p, i) => {
-        if (i === 0) return `M ${p.x} ${p.y}`
-        const timeDiff = filteredData[i]?.time - filteredData[i - 1]?.time
-        const cmd = (timeDiff > GAP_THRESHOLD) ? 'M' : 'L'
-        return `${cmd} ${p.x} ${p.y}`
-      }).join(' ')
-    : ''
+  // Build SVG path strings for line segments
+  const segmentPaths = segments.map(seg =>
+    seg.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
+  )
 
-  // 是否需要滚动
   const needsScroll = svgHeight > visibleHeight
 
   return (
     <View style={[styles.container, { height: chartHeight, width: windowWidth }]}>
-      {/* 可滚动的图表区域 */}
       <ScrollView
         ref={scrollViewRef}
         vertical
         showsVerticalScrollIndicator={needsScroll}
         style={[styles.scrollView, { height: visibleHeight, width: windowWidth }]}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { height: scrollContentHeight, paddingBottom: PADDING.bottom }
-        ]}
+        contentContainerStyle={[styles.scrollContent, { height: scrollContentHeight }]}
       >
         <Svg width={windowWidth} height={svgHeight}>
-          {/* 竖格子线 - 每秒一条（整数秒） */}
-          {xAxisLabels.map((t) => (
-            <Line
-              key={`vgrid-${t}`}
-              x1={timeToX(t)}
-              y1={PADDING.top}
-              x2={timeToX(t)}
-              y2={svgHeight - PADDING.bottom}
-              stroke="#ddd"
-              strokeWidth={1}
-            />
+          {/* Vertical grid lines */}
+          {xAxisLabels.map(t => (
+            <Line key={`vg-${t}`}
+              x1={timeToX(t)} y1={PADDING.top}
+              x2={timeToX(t)} y2={svgHeight - PADDING.bottom}
+              stroke="#ddd" strokeWidth={1} />
           ))}
 
-          {/* 横格子线 - 所有半音都画线 */}
-          {allMidiLines.map((midi) => (
-            <Line
-              key={`hgrid-${midi}`}
-              x1={PADDING.left}
-              y1={midiToY(midi)}
-              x2={windowWidth - PADDING.right}
-              y2={midiToY(midi)}
-              stroke="#ddd"
-              strokeWidth={1}
-            />
+          {/* Horizontal semitone lines */}
+          {allMidiLines.map(midi => (
+            <Line key={`hg-${midi}`}
+              x1={PADDING.left} y1={getMidiY(midi)}
+              x2={windowWidth - PADDING.right} y2={getMidiY(midi)}
+              stroke="#ddd" strokeWidth={1} />
           ))}
 
-          {/* Y轴标签 - 放在内侧 */}
-          {yAxisLabels.map((label) => (
-            <SvgText
-              key={label.note}
-              x={PADDING.left + 4}
-              y={midiToY(label.midi) + 4}
-              fontSize={10}
-              fill="#666"
-              textAnchor="start"
-            >
+          {/* Y-axis note labels */}
+          {yAxisLabels.map(label => (
+            <SvgText key={label.note}
+              x={PADDING.left + 4} y={getMidiY(label.midi) + 4}
+              fontSize={10} fill="#666" textAnchor="start">
               {label.note}
             </SvgText>
           ))}
 
-          {/* 音高曲线 */}
-          {pathData.length > 1 && (
-            <Path
+          {/* Scattered dots (isolated / unstable points) */}
+          {dots.map((d, i) => (
+            <Circle key={`dot-${i}`}
+              cx={d.x} cy={d.y} r={1.5}
+              fill="rgba(0,122,255,0.3)" />
+          ))}
+
+          {/* Connected line segments (stable pitch) */}
+          {segmentPaths.map((path, i) => (
+            <Path key={`seg-${i}`}
               d={path}
               fill="none"
               stroke="#007AFF"
               strokeWidth={2}
               strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
+              strokeLinejoin="round" />
+          ))}
         </Svg>
       </ScrollView>
 
-      {/* 固定在底部的横坐标 */}
+      {/* Fixed X-axis */}
       <View style={[styles.xAxisContainer, { width: windowWidth }]}>
         <Svg width={windowWidth} height={X_AXIS_HEIGHT}>
-          {/* X轴标签（时间）- 显示绝对时间，格式为整数或 xx:xx */}
-          {xAxisLabels.map((t) => (
-            <SvgText
-              key={t}
-              x={timeToX(t)}
-              y={16}
-              fontSize={10}
-              fill="#666"
-              textAnchor="middle"
-            >
+          {xAxisLabels.map(t => (
+            <SvgText key={t}
+              x={timeToX(t)} y={16}
+              fontSize={10} fill="#666" textAnchor="middle">
               {formatTimeLabel(t)}
             </SvgText>
           ))}
@@ -218,18 +216,12 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#fff'
-  },
+  container: { backgroundColor: '#fff' },
   scrollView: {},
-  scrollContent: {
-    paddingBottom: 0
-  },
+  scrollContent: { paddingBottom: 0 },
   xAxisContainer: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: 0, left: 0, right: 0,
     height: X_AXIS_HEIGHT,
     backgroundColor: '#fff',
     borderTopWidth: 1,

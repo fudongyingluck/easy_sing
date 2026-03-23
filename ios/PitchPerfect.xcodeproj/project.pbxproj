@@ -101,6 +101,7 @@
 		70C7DBD46A64DA9D61A0D13B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		AA000001000000000000004A /* PitchDetectorModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000002A /* PitchDetectorModule.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -202,6 +203,8 @@
 		5DCACB8F33CDC322A6C60F78 /* libPods-PitchPerfect.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-PitchPerfect.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = PitchPerfect/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = PitchPerfect/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		AA000001000000000000001A /* PitchDetectorModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PitchPerfect/PitchDetectorModule.h; sourceTree = "<group>"; };
+		AA000001000000000000002A /* PitchDetectorModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = PitchPerfect/PitchDetectorModule.mm; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -225,6 +228,8 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
+				AA000001000000000000001A /* PitchDetectorModule.h */,
+				AA000001000000000000002A /* PitchDetectorModule.mm */,
 			);
 			name = PitchPerfect;
 			sourceTree = "<group>";
@@ -603,6 +608,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				AA000001000000000000004A /* PitchDetectorModule.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
