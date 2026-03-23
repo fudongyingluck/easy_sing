@@ -11,7 +11,6 @@ const Tab = createBottomTabNavigator()
 
 export default function App() {
   useEffect(() => {
-    // 初始化存储
     initStorage()
   }, [])
 

@@ -6,7 +6,7 @@ import { Recording } from '../types'
 import { loadRecordings, saveRecordings, deleteRecordingFiles } from '../services/storage'
 import { audioService } from '../services/audio'
 
-export function RecordingsScreen() {
+export function RecordingsScreen({ navigation }: any) {
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(0)
@@ -66,6 +66,12 @@ export function RecordingsScreen() {
   useEffect(() => {
     loadRecordingsList()
   }, [])
+
+  // 每次切换到此 tab 时重新加载（左滑进入、保存录音后等场景）
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', loadRecordingsList)
+    return unsubscribe
+  }, [navigation])
 
   // 播放录音
   const playRecording = async (recording: Recording) => {

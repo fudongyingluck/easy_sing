@@ -1,17 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native'
-import Svg, { Line, Text as SvgText, Path, Circle } from 'react-native-svg'
+import { View, StyleSheet, useWindowDimensions, PanResponder, ScrollView } from 'react-native'
+import Svg, { Line, Text as SvgText, Path, Circle, Rect } from 'react-native-svg'
 import { PitchDataPoint } from '../types'
 import { noteNameToMidi, midiToNoteName } from '../utils/noteUtils'
 import { CONFIG } from '../config/constants'
 
-const PADDING = { top: 10, bottom: 30, left: 5, right: 10 }
+const PADDING = { top: 4, bottom: 4, left: 5, right: 10 }
 const X_AXIS_HEIGHT = 30
 const pixelsPerSemitone = 20
 
-// Two consecutive points are "connected" (draw line) if:
-//   - time gap < 0.15 s  AND
-//   - pitch difference < 2 semitones
 const LINE_TIME_GAP = 0.15
 const LINE_SEMITONE_GAP = 2
 
@@ -22,12 +19,72 @@ interface PitchChartProps {
   duration?: number
   height?: number
   currentTime?: number
+  paused?: boolean
 }
 
-export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_CHART_DURATION, height, currentTime }: PitchChartProps) {
-  const scrollViewRef = useRef<ScrollView>(null)
-  const [initialScrollDone, setInitialScrollDone] = useState(false)
+export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_CHART_DURATION, height, currentTime, paused }: PitchChartProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
+  const [initialScrollDone, setInitialScrollDone] = useState(false)
+  const [timeOffset, setTimeOffset] = useState(0)
+
+  const scrollViewRef = useRef<ScrollView>(null)
+  const actualScrollY = useRef(0)  // 只由 onScroll 回调更新，始终反映 ScrollView 真实位置
+
+  // refs 避免 PanResponder stale closure
+  const timeOffsetRef = useRef(0)
+  const pausedRef = useRef(paused)
+  const currentTimeRef = useRef(currentTime)
+  const windowWidthRef = useRef(windowWidth)
+  const durationRef = useRef(duration)
+  const panStartTimeOffset = useRef(0)
+  const panStartScrollY = useRef(0)
+  const directionLock = useRef<'horizontal' | 'vertical' | null>(null)
+
+  useEffect(() => { pausedRef.current = paused }, [paused])
+  useEffect(() => { currentTimeRef.current = currentTime }, [currentTime])
+  useEffect(() => { windowWidthRef.current = windowWidth }, [windowWidth])
+  useEffect(() => { durationRef.current = duration }, [duration])
+
+  const updateTimeOffset = (v: number) => { timeOffsetRef.current = v; setTimeOffset(v) }
+
+  const scrollTo = (y: number) => {
+    scrollViewRef.current?.scrollTo({ y, animated: false })
+    // 不在这里更新 actualScrollY，onScroll 是唯一来源，确保始终是真实值
+  }
+
+  // 录音继续时重置时间视口
+  useEffect(() => {
+    if (!paused) updateTimeOffset(0)
+  }, [paused])
+
+  // PanResponder 拦截所有手势（SVG 会拦截触摸，必须用 overlay）
+  // 垂直方向调用 scrollTo，由 ScrollView 原生 clamp 边界
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        panStartTimeOffset.current = timeOffsetRef.current
+        panStartScrollY.current = actualScrollY.current  // 用真实位置，不受乐观更新污染
+        directionLock.current = null
+      },
+      onPanResponderMove: (_, { dx, dy }) => {
+        if (!directionLock.current) {
+          if (Math.abs(dx) > Math.abs(dy)) directionLock.current = 'horizontal'
+          else directionLock.current = 'vertical'
+        }
+        if (directionLock.current === 'horizontal' && pausedRef.current) {
+          const secsPerPixel = durationRef.current / (windowWidthRef.current - 20)
+          const newOffset = panStartTimeOffset.current + dx * secsPerPixel
+          const maxOffset = Math.max(0, (currentTimeRef.current ?? 0) - durationRef.current)
+          updateTimeOffset(Math.max(0, Math.min(newOffset, maxOffset)))
+        } else if (directionLock.current === 'vertical') {
+          // scrollTo 内部会 clamp 到 [0, maxScrollY]，无需手动限制
+          scrollTo(panStartScrollY.current - dy)
+        }
+      },
+    })
+  ).current
 
   const minMidi = noteNameToMidi(minNote)
   const maxMidi = noteNameToMidi(maxNote)
@@ -36,7 +93,6 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
   const chartWidth = windowWidth - PADDING.left - PADDING.right
   const svgHeight = midiRange * pixelsPerSemitone + PADDING.top + PADDING.bottom
   const chartHeight = height || (windowHeight * 5 / 12)
-  const scrollContentHeight = Math.max(chartHeight - X_AXIS_HEIGHT, svgHeight)
   const visibleHeight = chartHeight - X_AXIS_HEIGHT
 
   const getMidiY = (midi: number) => {
@@ -44,39 +100,36 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
     return PADDING.top + (1 - normalized) * (svgHeight - PADDING.top - PADDING.bottom)
   }
 
+  // 初始居中
   useEffect(() => {
-    if (!initialScrollDone && scrollViewRef.current && scrollContentHeight > visibleHeight) {
-      setTimeout(() => {
-        const centerMidi = minMidi + midiRange / 2
-        const centerY = getMidiY(centerMidi)
-        const scrollY = Math.max(0, centerY - visibleHeight / 2)
-        scrollViewRef.current?.scrollTo({ y: scrollY, animated: false })
-        setInitialScrollDone(true)
-      }, 50)
+    if (!initialScrollDone && svgHeight > visibleHeight) {
+      const centerMidi = minMidi + midiRange / 2
+      const centerY = getMidiY(centerMidi)
+      const initY = Math.max(0, centerY - visibleHeight / 2)
+      scrollTo(initY)
+      setInitialScrollDone(true)
     }
-  }, [minMidi, maxMidi, initialScrollDone, scrollContentHeight, visibleHeight])
+  }, [minMidi, maxMidi, initialScrollDone, svgHeight, visibleHeight])
 
-  const now = currentTime ?? (data.length > 0 ? data[data.length - 1].time : 0)
+  const latestTime = currentTime ?? (data.length > 0 ? data[data.length - 1].time : 0)
+  const now = Math.max(duration, latestTime - timeOffset)
   const startTime = Math.max(0, now - duration)
-  const filteredData = data.filter(p => p.time >= startTime && p.freq > 0)
+  const filteredData = data.filter(p => p.time >= startTime && p.time <= now && p.freq > 0)
 
   const timeToX = (time: number) =>
     PADDING.left + ((time - startTime) / duration) * chartWidth
 
   const freqToMidi = (freq: number) => 12 * Math.log2(freq / 440) + 69
 
-  // Y-axis labels (white keys only)
   const yAxisLabels = []
   for (let midi = minMidi; midi <= maxMidi; midi++) {
     const noteName = midiToNoteName(midi)
     if (!noteName.includes('#')) yAxisLabels.push({ midi, note: noteName })
   }
 
-  // All semitone grid lines
   const allMidiLines = []
   for (let midi = minMidi; midi <= maxMidi; midi++) allMidiLines.push(midi)
 
-  // X-axis labels
   const xAxisLabels = []
   for (let t = Math.ceil(startTime); t <= startTime + duration; t++) xAxisLabels.push(t)
 
@@ -85,8 +138,6 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
     return `${s}`
   }
 
-  // Build render primitives: classify each point as dot or part of a line segment
-  // A "segment" is a run of consecutive points that are all "connected"
   type Dot = { x: number; y: number }
   type Segment = { points: Array<{ x: number; y: number }> }
 
@@ -104,57 +155,45 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
       const x = timeToX(p.time)
       const y = getMidiY(midi)
 
-      if (i === 0) {
-        currentSegment = [{ x, y }]
-        continue
-      }
+      if (i === 0) { currentSegment = [{ x, y }]; continue }
 
       const prev = filteredData[i - 1]
       const prevMidi = freqToMidi(prev.freq)
       const timeDiff = p.time - prev.time
       const midiDiff = Math.abs(midi - prevMidi)
-
       const connected = timeDiff < LINE_TIME_GAP && midiDiff < LINE_SEMITONE_GAP
 
       if (connected) {
         currentSegment!.push({ x, y })
       } else {
-        // Flush current segment
-        if (currentSegment && currentSegment.length >= 3) {
-          segments.push({ points: currentSegment })
-        } else if (currentSegment) {
-          dots.push(...currentSegment)
-        }
+        if (currentSegment && currentSegment.length >= 3) segments.push({ points: currentSegment })
+        else if (currentSegment) dots.push(...currentSegment)
         currentSegment = [{ x, y }]
       }
     }
 
-    // Flush last segment
-    if (currentSegment && currentSegment.length >= 3) {
-      segments.push({ points: currentSegment })
-    } else if (currentSegment) {
-      dots.push(...currentSegment)
-    }
+    if (currentSegment && currentSegment.length >= 3) segments.push({ points: currentSegment })
+    else if (currentSegment) dots.push(...currentSegment)
   }
 
-  // Build SVG path strings for line segments
   const segmentPaths = segments.map(seg =>
     seg.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
   )
 
-  const needsScroll = svgHeight > visibleHeight
-
   return (
     <View style={[styles.container, { height: chartHeight, width: windowWidth }]}>
+      {/* ScrollView 负责实际渲染位置，scrollEnabled=false 由 PanResponder 驱动 */}
       <ScrollView
         ref={scrollViewRef}
-        vertical
-        showsVerticalScrollIndicator={needsScroll}
-        style={[styles.scrollView, { height: visibleHeight, width: windowWidth }]}
-        contentContainerStyle={[styles.scrollContent, { height: scrollContentHeight }]}
+        style={{ height: visibleHeight }}
+        scrollEnabled={false}
+        showsVerticalScrollIndicator={false}
+        onScroll={e => { actualScrollY.current = e.nativeEvent.contentOffset.y }}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: 30 }}
       >
         <Svg width={windowWidth} height={svgHeight}>
-          {/* Vertical grid lines */}
+          <Rect x={0} y={PADDING.top} width={windowWidth} height={svgHeight - PADDING.top - PADDING.bottom} fill="#f5f5f5" />
           {xAxisLabels.map(t => (
             <Line key={`vg-${t}`}
               x1={timeToX(t)} y1={PADDING.top}
@@ -162,7 +201,6 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
               stroke="#ddd" strokeWidth={1} />
           ))}
 
-          {/* Horizontal semitone lines */}
           {allMidiLines.map(midi => (
             <Line key={`hg-${midi}`}
               x1={PADDING.left} y1={getMidiY(midi)}
@@ -170,7 +208,6 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
               stroke="#ddd" strokeWidth={1} />
           ))}
 
-          {/* Y-axis note labels */}
           {yAxisLabels.map(label => (
             <SvgText key={label.note}
               x={PADDING.left + 4} y={getMidiY(label.midi) + 4}
@@ -179,33 +216,28 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
             </SvgText>
           ))}
 
-          {/* Scattered dots (isolated / unstable points) */}
           {dots.map((d, i) => (
-            <Circle key={`dot-${i}`}
-              cx={d.x} cy={d.y} r={1.5}
-              fill="rgba(0,122,255,0.3)" />
+            <Circle key={`dot-${i}`} cx={d.x} cy={d.y} r={1.5} fill="rgba(0,122,255,0.3)" />
           ))}
 
-          {/* Connected line segments (stable pitch) */}
           {segmentPaths.map((path, i) => (
             <Path key={`seg-${i}`}
-              d={path}
-              fill="none"
-              stroke="#007AFF"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round" />
+              d={path} fill="none" stroke="#007AFF" strokeWidth={2}
+              strokeLinecap="round" strokeLinejoin="round" />
           ))}
         </Svg>
       </ScrollView>
 
-      {/* Fixed X-axis */}
+      {/* 透明 overlay，拦截所有触摸（SVG 新架构会拦截触摸，必须用此方案） */}
+      <View
+        style={[StyleSheet.absoluteFillObject, { bottom: X_AXIS_HEIGHT }]}
+        {...panResponder.panHandlers}
+      />
+
       <View style={[styles.xAxisContainer, { width: windowWidth }]}>
         <Svg width={windowWidth} height={X_AXIS_HEIGHT}>
           {xAxisLabels.map(t => (
-            <SvgText key={t}
-              x={timeToX(t)} y={16}
-              fontSize={10} fill="#666" textAnchor="middle">
+            <SvgText key={t} x={timeToX(t)} y={16} fontSize={10} fill="#666" textAnchor="middle">
               {formatTimeLabel(t)}
             </SvgText>
           ))}
@@ -216,9 +248,7 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
 }
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: '#fff' },
-  scrollView: {},
-  scrollContent: { paddingBottom: 0 },
+  container: { backgroundColor: '#f5f5f5' },
   xAxisContainer: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,

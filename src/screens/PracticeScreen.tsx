@@ -12,7 +12,7 @@ import { PRESET_MODES, CONFIG } from '../config/constants'
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
 
-export function PracticeScreen() {
+export function PracticeScreen({ navigation }: any) {
   const [appMode, setAppMode] = useState<AppMode>('recording')
   const [recordingState, setRecordingState] = useState<RecordingState>('idle')
   const [currentModeId, setCurrentModeId] = useState<string>('female')
@@ -23,6 +23,7 @@ export function PracticeScreen() {
   const [recordingTime, setRecordingTime] = useState(0)
   const [pianoExpanded, setPianoExpanded] = useState(true)
   const [hasSavedRecording, setHasSavedRecording] = useState(false)
+  const [chartAreaHeight, setChartAreaHeight] = useState(SCREEN_HEIGHT * 5 / 12)
 
   const recordingTimerRef = useRef<any>(null)
   const lastTapTimeRef = useRef<number>(0)
@@ -238,14 +239,16 @@ export function PracticeScreen() {
       <View style={styles.middleContent}>
         {/* 音高曲线图 - 录音模式显示 */}
         {appMode === 'recording' && (
-          <View style={styles.chartContainer}>
+          <View style={styles.chartContainer} onLayout={e => setChartAreaHeight(e.nativeEvent.layout.height)}>
             <PitchChart
               key={`${currentMode.startNote}-${currentMode.endNote}`}
               data={pitchData}
               minNote={currentMode.startNote}
               maxNote={currentMode.endNote}
               duration={CONFIG.DEFAULT_CHART_DURATION}
-              height={SCREEN_HEIGHT * 5 / 12}
+              height={chartAreaHeight}
+              currentTime={recordingTime}
+              paused={recordingState === 'paused'}
             />
           </View>
         )}
@@ -370,13 +373,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'column'
   },
-  chartContainer: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-    minHeight: 0
-  },
+  chartContainer: { flex: 1, minHeight: 0 },
   pianoModeHint: {
     flex: 1,
     justifyContent: 'center',
