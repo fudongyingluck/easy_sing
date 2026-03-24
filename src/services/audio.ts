@@ -42,7 +42,7 @@ export class AudioService {
     this.isRecording = true
     this.isPaused = false
 
-    Pitchy.init({ bufferSize: 2048, minVolume: -50 })
+    Pitchy.init({ bufferSize: 1024, minVolume: -50 })
     this.pitchSubscription = Pitchy.addListener(({ pitch }: { pitch: number }) => {
       if (!this.isRecording || this.isPaused) return
       if (pitch < 60 || pitch > 1400) return

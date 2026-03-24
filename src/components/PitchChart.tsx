@@ -221,12 +221,12 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
           ))}
 
           {dots.map((d, i) => (
-            <Circle key={`dot-${i}`} cx={d.x} cy={d.y} r={1.5} fill="rgba(0,122,255,0.3)" />
+            <Circle key={`dot-${i}`} cx={d.x} cy={d.y} r={1} fill="rgba(0,122,255,0.3)" />
           ))}
 
           {segmentPaths.map((path, i) => (
             <Path key={`seg-${i}`}
-              d={path} fill="none" stroke="#007AFF" strokeWidth={2}
+              d={path} fill="none" stroke="#007AFF" strokeWidth={1.5}
               strokeLinecap="round" strokeLinejoin="round" />
           ))}
         </Svg>
