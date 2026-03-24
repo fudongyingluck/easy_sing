@@ -390,13 +390,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end'
+    justifyContent: 'center',
+    paddingHorizontal: 24
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '60%'
+    borderRadius: 16,
+    maxHeight: '80%'
   },
   modalHeader: {
     flexDirection: 'row',
