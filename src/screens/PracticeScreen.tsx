@@ -231,7 +231,7 @@ export function PracticeScreen({ navigation }: any) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       {/* 标题 */}
       <View style={styles.header}>
         <View style={styles.titleWithIcon}>
