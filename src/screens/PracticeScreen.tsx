@@ -22,7 +22,6 @@ export function PracticeScreen({ navigation }: any) {
   const [pitchData, setPitchData] = useState<any[]>([])
   const [recordingTime, setRecordingTime] = useState(0)
   const [pianoExpanded, setPianoExpanded] = useState(true)
-  const [hasSavedRecording, setHasSavedRecording] = useState(false)
   const [chartAreaHeight, setChartAreaHeight] = useState(SCREEN_HEIGHT * 5 / 12)
 
   const recordingTimerRef = useRef<any>(null)
@@ -184,7 +183,7 @@ export function PracticeScreen({ navigation }: any) {
       setRecordingId(null)
       setRecordingTime(0)
       setPitchData([])
-      setHasSavedRecording(true)
+
     } catch (error) {
       console.error('Failed to save recording:', error)
     }
@@ -210,7 +209,7 @@ export function PracticeScreen({ navigation }: any) {
       setRecordingId(null)
       setRecordingTime(0)
       setPitchData([])
-      setHasSavedRecording(false)
+
     } catch (error) {
       console.error('Failed to discard recording:', error)
     }
@@ -270,7 +269,7 @@ export function PracticeScreen({ navigation }: any) {
         {/* 控制按钮 */}
         <View style={styles.controls}>
           {/* 状态1：空闲（Idle）- 显示开始按钮 */}
-          {recordingState === 'idle' && !hasSavedRecording && appMode === 'recording' && (
+          {recordingState === 'idle' && appMode === 'recording' && (
             <TouchableOpacity style={[styles.controlButton, styles.recordButton]} onPress={startRecording}>
               <Text style={styles.controlButtonText}>开始</Text>
             </TouchableOpacity>
@@ -298,15 +297,6 @@ export function PracticeScreen({ navigation }: any) {
             </View>
           )}
 
-          {/* 状态4：已保存（Stopped）- 显示重新按钮 */}
-          {recordingState === 'idle' && hasSavedRecording && (
-            <TouchableOpacity style={[styles.controlButton, styles.recordButton]} onPress={() => {
-              setHasSavedRecording(false)
-              startRecording()
-            }}>
-              <Text style={styles.controlButtonText}>重新</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* 虚拟钢琴 */}
