@@ -5,6 +5,8 @@ import Pitchy from 'react-native-pitchy'
 
 const MAX_RECORDING_DURATION = CONFIG.MAX_RECORDING_DURATION
 
+const PITCHY_CONFIG = { bufferSize: 512, minVolume: -70 }
+
 export class AudioService {
   private recordingId: string | null = null
   private pitchData: PitchDataPoint[] = []
@@ -18,6 +20,7 @@ export class AudioService {
 
   private pitchSubscription: any = null
   private maxDurationInterval: any = null
+  private pitchWindow: number[] = []  // 滑动窗口，存最近 N 个原始频率，用于中值纠正
 
   constructor() {
     // JS reload 后 Pitchy native 状态可能残留，强制清理以释放 audio session
@@ -37,31 +40,14 @@ export class AudioService {
 
     this.recordingId = `rec_${Date.now()}`
     this.pitchData = []
+    this.pitchWindow = []
     this.recordingStartTime = Date.now()
     this.totalPausedTime = 0
     this.isRecording = true
     this.isPaused = false
 
-    Pitchy.init({ bufferSize: 1024, minVolume: -50 })
-    this.pitchSubscription = Pitchy.addListener(({ pitch }: { pitch: number }) => {
-      if (!this.isRecording || this.isPaused) return
-      if (pitch < 60 || pitch > 1400) return
-
-      const time = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
-      const midi = Math.round(12 * Math.log2(pitch / 440) + 69)
-      const note = midiToNoteName(midi)
-      this.pitchData.push({ time, freq: pitch, note })
-
-      const maxPoints = CONFIG.PITCH_DATA_SAMPLE_RATE * MAX_RECORDING_DURATION
-      if (this.pitchData.length > maxPoints) {
-        this.pitchData = this.pitchData.slice(-maxPoints)
-      }
-
-      if (this.onPitchDataUpdate) {
-        this.onPitchDataUpdate([...this.pitchData])
-      }
-    })
-
+    Pitchy.init(PITCHY_CONFIG)
+    this.pitchSubscription = Pitchy.addListener(this.onPitchEvent)
     await Pitchy.start()
 
     this.maxDurationInterval = setInterval(() => {
@@ -86,7 +72,7 @@ export class AudioService {
         this.pitchSubscription.remove()
         this.pitchSubscription = null
       }
-      try { Pitchy.stop() } catch {}
+      try { await Pitchy.stop() } catch {}
     }
   }
 
@@ -94,25 +80,9 @@ export class AudioService {
     if (this.isRecording && this.isPaused) {
       this.isPaused = false
       this.totalPausedTime += Date.now() - this.pauseStartTime
-      // 重新启动麦克风
-      this.pitchSubscription = Pitchy.addListener(({ pitch }: { pitch: number }) => {
-        if (!this.isRecording || this.isPaused) return
-        if (pitch < 60 || pitch > 1400) return
-
-        const time = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
-        const midi = Math.round(12 * Math.log2(pitch / 440) + 69)
-        const note = midiToNoteName(midi)
-        this.pitchData.push({ time, freq: pitch, note })
-
-        const maxPoints = CONFIG.PITCH_DATA_SAMPLE_RATE * MAX_RECORDING_DURATION
-        if (this.pitchData.length > maxPoints) {
-          this.pitchData = this.pitchData.slice(-maxPoints)
-        }
-
-        if (this.onPitchDataUpdate) {
-          this.onPitchDataUpdate([...this.pitchData])
-        }
-      })
+      // 重新初始化并启动麦克风
+      Pitchy.init(PITCHY_CONFIG)
+      this.pitchSubscription = Pitchy.addListener(this.onPitchEvent)
       await Pitchy.start()
     }
   }
@@ -132,6 +102,34 @@ export class AudioService {
         duration: Math.round(duration),
         data: this.pitchData
       }
+    }
+  }
+
+  private onPitchEvent = ({ pitch }: { pitch: number }) => {
+    if (!this.isRecording || this.isPaused) return
+    if (pitch < 60 || pitch > 1400) return
+
+    // 中值纠正：维护最近 9 个原始频率的滑动窗口
+    this.pitchWindow.push(pitch)
+    if (this.pitchWindow.length > 9) this.pitchWindow.shift()
+    const sorted = [...this.pitchWindow].sort((a, b) => a - b)
+    const median = sorted[Math.floor(sorted.length / 2)]
+    // 仅纠正倍频/半频异常，保留正常抖动（颤音）
+    const correctedPitch = (pitch > median * 1.25 || pitch < median / 1.25) ? median : pitch
+
+    const midi = Math.round(12 * Math.log2(correctedPitch / 440) + 69)
+    const note = midiToNoteName(midi)
+
+    const time = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
+    this.pitchData.push({ time, freq: correctedPitch, note })
+
+    const maxPoints = CONFIG.PITCH_DATA_SAMPLE_RATE * MAX_RECORDING_DURATION
+    if (this.pitchData.length > maxPoints) {
+      this.pitchData = this.pitchData.slice(-maxPoints)
+    }
+
+    if (this.onPitchDataUpdate) {
+      this.onPitchDataUpdate([...this.pitchData])
     }
   }
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { View, StyleSheet, useWindowDimensions, PanResponder, ScrollView } from 'react-native'
-import Svg, { Line, Text as SvgText, Path, Circle, Rect } from 'react-native-svg'
+import Svg, { Line, Text as SvgText, Path, Circle, Rect, Defs, LinearGradient, Stop } from 'react-native-svg'
 import { PitchDataPoint } from '../types'
 import { noteNameToMidi, midiToNoteName } from '../utils/noteUtils'
 import { CONFIG } from '../config/constants'
@@ -9,8 +9,8 @@ const PADDING = { top: 4, bottom: 4, left: 5, right: 10 }
 const X_AXIS_HEIGHT = 30
 const pixelsPerSemitone = 20
 
-const LINE_TIME_GAP = 0.15
-const LINE_SEMITONE_GAP = 2
+const LINE_TIME_GAP = 0.25
+const LINE_SEMITONE_GAP = 3
 
 interface PitchChartProps {
   data: PitchDataPoint[]
@@ -180,9 +180,24 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
     else if (currentSegment) dots.push(...currentSegment)
   }
 
-  const segmentPaths = segments.map(seg =>
-    seg.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
-  )
+  const segmentPaths = segments.map(seg => {
+    const pts = seg.points
+    if (pts.length < 2) return `M ${pts[0].x} ${pts[0].y}`
+    let d = `M ${pts[0].x} ${pts[0].y}`
+    const n = pts.length
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = pts[Math.max(i - 1, 0)]
+      const p1 = pts[i]
+      const p2 = pts[i + 1]
+      const p3 = pts[Math.min(i + 2, n - 1)]
+      const cp1x = p1.x + (p2.x - p0.x) / 6
+      const cp1y = p1.y + (p2.y - p0.y) / 6
+      const cp2x = p2.x - (p3.x - p1.x) / 6
+      const cp2y = p2.y - (p3.y - p1.y) / 6
+      d += ` C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x} ${p2.y}`
+    }
+    return d
+  })
 
   return (
     <View style={[styles.container, { height: chartHeight, width: windowWidth }]}>
@@ -197,6 +212,14 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
         contentContainerStyle={{ paddingBottom: 30 }}
       >
         <Svg width={windowWidth} height={svgHeight}>
+          <Defs>
+            <LinearGradient id="pitchGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <Stop offset="0%" stopColor="#007AFF" stopOpacity="0" />
+              <Stop offset="15%" stopColor="#007AFF" stopOpacity="1" />
+              <Stop offset="85%" stopColor="#007AFF" stopOpacity="1" />
+              <Stop offset="100%" stopColor="#007AFF" stopOpacity="0" />
+            </LinearGradient>
+          </Defs>
           <Rect x={0} y={PADDING.top} width={windowWidth} height={svgHeight - PADDING.top - PADDING.bottom} fill="#f5f5f5" />
           {xAxisLabels.map(t => (
             <Line key={`vg-${t}`}
@@ -221,12 +244,12 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
           ))}
 
           {dots.map((d, i) => (
-            <Circle key={`dot-${i}`} cx={d.x} cy={d.y} r={1} fill="rgba(0,122,255,0.3)" />
+            <Circle key={`dot-${i}`} cx={d.x} cy={d.y} r={1.5} fill="rgba(0,122,255,0.5)" />
           ))}
 
           {segmentPaths.map((path, i) => (
             <Path key={`seg-${i}`}
-              d={path} fill="none" stroke="#007AFF" strokeWidth={1.5}
+              d={path} fill="none" stroke="url(#pitchGradient)" strokeWidth={2.5}
               strokeLinecap="round" strokeLinejoin="round" />
           ))}
         </Svg>

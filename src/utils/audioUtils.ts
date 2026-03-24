@@ -1,5 +1,8 @@
 import { noteNameToFreq, midiToNoteName } from './noteUtils'
 import Sound from 'react-native-sound'
+import { NativeModules } from 'react-native'
+
+const { AudioSessionModule } = NativeModules
 
 // 升调 → 降调 映射（音频文件用降调命名）
 const SHARP_TO_FLAT: Record<string, string> = {
@@ -16,8 +19,7 @@ class AudioPlayer {
   private soundCache: SoundMap = new Map()
 
   constructor() {
-    console.log('[AudioPlayer] constructor, calling Sound.setCategory(Playback)')
-    Sound.setCategory('Playback')
+    AudioSessionModule?.resetForPlayback()
   }
 
   private getFileName(noteName: string): string {
@@ -58,9 +60,8 @@ class AudioPlayer {
   }
 
   async playNote(noteName: string, duration: number = 0.5): Promise<void> {
-    console.log(`[AudioPlayer] playNote: ${noteName}, calling setCategory(Playback)`)
-    Sound.setCategory('Playback')
-    Sound.setActive(true)
+    console.log(`[AudioPlayer] playNote: ${noteName}`)
+    AudioSessionModule?.resetForPlayback()
     const sound = await this.loadSound(noteName)
     if (sound) {
       console.log(`[AudioPlayer] playNote: got sound, calling play()`)

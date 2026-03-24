@@ -1,7 +1,7 @@
 // 全局常量配置
 export const CONFIG = {
   // 音高曲线
-  DEFAULT_CHART_DURATION: 5,      // 默认显示最近5秒
+  DEFAULT_CHART_DURATION: 6,      // 默认显示最近6秒
   PITCH_DATA_SAMPLE_RATE: 10,    // 每秒保存10个音高数据点（可调整）
 
   // 钢琴
