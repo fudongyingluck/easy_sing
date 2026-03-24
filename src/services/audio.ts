@@ -19,6 +19,11 @@ export class AudioService {
   private pitchSubscription: any = null
   private maxDurationInterval: any = null
 
+  constructor() {
+    // JS reload 后 Pitchy native 状态可能残留，强制清理以释放 audio session
+    try { Pitchy.stop() } catch {}
+  }
+
   setOnPitchDataUpdate(callback: ((data: PitchDataPoint[]) => void) | null) {
     this.onPitchDataUpdate = callback
   }
@@ -76,6 +81,12 @@ export class AudioService {
     if (this.isRecording && !this.isPaused) {
       this.isPaused = true
       this.pauseStartTime = Date.now()
+      // 释放麦克风，让 audio session 恢复为可播放状态
+      if (this.pitchSubscription) {
+        this.pitchSubscription.remove()
+        this.pitchSubscription = null
+      }
+      try { Pitchy.stop() } catch {}
     }
   }
 
@@ -83,6 +94,26 @@ export class AudioService {
     if (this.isRecording && this.isPaused) {
       this.isPaused = false
       this.totalPausedTime += Date.now() - this.pauseStartTime
+      // 重新启动麦克风
+      this.pitchSubscription = Pitchy.addListener(({ pitch }: { pitch: number }) => {
+        if (!this.isRecording || this.isPaused) return
+        if (pitch < 60 || pitch > 1400) return
+
+        const time = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
+        const midi = Math.round(12 * Math.log2(pitch / 440) + 69)
+        const note = midiToNoteName(midi)
+        this.pitchData.push({ time, freq: pitch, note })
+
+        const maxPoints = CONFIG.PITCH_DATA_SAMPLE_RATE * MAX_RECORDING_DURATION
+        if (this.pitchData.length > maxPoints) {
+          this.pitchData = this.pitchData.slice(-maxPoints)
+        }
+
+        if (this.onPitchDataUpdate) {
+          this.onPitchDataUpdate([...this.pitchData])
+        }
+      })
+      await Pitchy.start()
     }
   }
 

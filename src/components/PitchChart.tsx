@@ -147,6 +147,7 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
 
   if (filteredData.length > 0) {
     let currentSegment: Array<{ x: number; y: number }> | null = null
+    let prevValidMidi: number | null = null
 
     for (let i = 0; i < filteredData.length; i++) {
       const p = filteredData[i]
@@ -156,24 +157,26 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
       const x = timeToX(p.time)
       const y = getMidiY(midi)
 
-      if (i === 0) { currentSegment = [{ x, y }]; continue }
-
-      const prev = filteredData[i - 1]
-      const prevMidi = freqToMidi(prev.freq)
-      const timeDiff = p.time - prev.time
-      const midiDiff = Math.abs(midi - prevMidi)
-      const connected = timeDiff < LINE_TIME_GAP && midiDiff < LINE_SEMITONE_GAP
-
-      if (connected) {
-        currentSegment!.push({ x, y })
-      } else {
-        if (currentSegment && currentSegment.length >= 3) segments.push({ points: currentSegment })
-        else if (currentSegment) dots.push(...currentSegment)
+      if (prevValidMidi === null) {
         currentSegment = [{ x, y }]
+      } else {
+        const timeDiff = p.time - filteredData[i - 1].time
+        const midiDiff = Math.abs(midi - prevValidMidi)
+        const connected = timeDiff < LINE_TIME_GAP && midiDiff < LINE_SEMITONE_GAP
+
+        if (connected) {
+          currentSegment!.push({ x, y })
+        } else {
+          if (currentSegment && currentSegment.length >= 2) segments.push({ points: currentSegment })
+          else if (currentSegment) dots.push(...currentSegment)
+          currentSegment = [{ x, y }]
+        }
       }
+
+      prevValidMidi = midi
     }
 
-    if (currentSegment && currentSegment.length >= 3) segments.push({ points: currentSegment })
+    if (currentSegment && currentSegment.length >= 2) segments.push({ points: currentSegment })
     else if (currentSegment) dots.push(...currentSegment)
   }
 

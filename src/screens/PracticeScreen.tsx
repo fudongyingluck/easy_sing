@@ -81,6 +81,7 @@ export function PracticeScreen({ navigation }: any) {
   // 开始录音
   const startRecording = async () => {
     try {
+      console.log('[Button] 开始录音')
       setPitchData([])
 
       // 设置音高数据更新回调
@@ -110,6 +111,7 @@ export function PracticeScreen({ navigation }: any) {
   // 暂停录音
   const pauseRecording = async () => {
     try {
+      console.log('[Button] 暂停录音')
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current)
         recordingTimerRef.current = null
@@ -124,6 +126,7 @@ export function PracticeScreen({ navigation }: any) {
   // 继续录音
   const resumeRecording = async () => {
     try {
+      console.log('[Button] 继续录音')
       await audioService.resumeRecording()
       setRecordingState('recording')
 
