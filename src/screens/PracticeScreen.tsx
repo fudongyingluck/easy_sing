@@ -28,7 +28,7 @@ export function PracticeScreen({ navigation }: any) {
   const recordingTimerRef = useRef<any>(null)
   const lastTapTimeRef = useRef<number>(0)
 
-  // 加载用户设置
+  // 每次切换回练习 Tab 时重新加载设置
   useEffect(() => {
     const loadData = async () => {
       const settings = await loadUserSettings()
@@ -36,7 +36,9 @@ export function PracticeScreen({ navigation }: any) {
       setCustomModes(settings.customModes)
     }
     loadData()
-  }, [])
+    const unsubscribe = navigation.addListener('focus', loadData)
+    return unsubscribe
+  }, [navigation])
 
   // 双击处理（音域区或钢琴区域）
   const handleDoubleTap = () => {
