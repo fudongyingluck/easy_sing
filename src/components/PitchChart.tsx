@@ -214,10 +214,10 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
         <Svg width={windowWidth} height={svgHeight}>
           <Defs>
             <LinearGradient id="pitchGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <Stop offset="0%" stopColor="#007AFF" stopOpacity="0" />
+              <Stop offset="0%" stopColor="#99C5FF" stopOpacity="1" />
               <Stop offset="15%" stopColor="#007AFF" stopOpacity="1" />
               <Stop offset="85%" stopColor="#007AFF" stopOpacity="1" />
-              <Stop offset="100%" stopColor="#007AFF" stopOpacity="0" />
+              <Stop offset="100%" stopColor="#99C5FF" stopOpacity="1" />
             </LinearGradient>
           </Defs>
           <Rect x={0} y={PADDING.top} width={windowWidth} height={svgHeight - PADDING.top - PADDING.bottom} fill="#f5f5f5" />
