@@ -236,9 +236,17 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
           ))}
 
           {yAxisLabels.map(label => (
-            <SvgText key={label.note}
+            <SvgText key={`yl-${label.note}`}
               x={PADDING.left + 4} y={getMidiY(label.midi) + 4}
               fontSize={10} fill="#666" textAnchor="start">
+              {label.note}
+            </SvgText>
+          ))}
+
+          {yAxisLabels.map(label => (
+            <SvgText key={`yr-${label.note}`}
+              x={windowWidth - PADDING.right - 4} y={getMidiY(label.midi) + 4}
+              fontSize={10} fill="#666" textAnchor="end">
               {label.note}
             </SvgText>
           ))}
