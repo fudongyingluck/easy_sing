@@ -3,7 +3,7 @@ import { CONFIG } from '../config/constants'
 import { midiToNoteName } from '../utils/noteUtils'
 import Pitchy from 'react-native-pitchy'
 
-const MAX_RECORDING_DURATION = CONFIG.MAX_RECORDING_DURATION
+const DEFAULT_MAX_DURATION = CONFIG.MAX_RECORDING_DURATION
 
 const PITCHY_CONFIG = { bufferSize: 512, minVolume: -70 }
 
@@ -35,7 +35,7 @@ export class AudioService {
     this.onMaxDurationReached = callback
   }
 
-  async startRecording(): Promise<string> {
+  async startRecording(durationLimit: number = DEFAULT_MAX_DURATION): Promise<string> {
     this.stopAll()
 
     this.recordingId = `rec_${Date.now()}`
@@ -50,15 +50,18 @@ export class AudioService {
     this.pitchSubscription = Pitchy.addListener(this.onPitchEvent)
     await Pitchy.start()
 
-    this.maxDurationInterval = setInterval(() => {
-      if (!this.isRecording || this.isPaused) return
-      const d = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
-      if (d >= MAX_RECORDING_DURATION) {
-        if (this.onMaxDurationReached) this.onMaxDurationReached()
-        clearInterval(this.maxDurationInterval)
-        this.maxDurationInterval = null
-      }
-    }, 1000)
+    // durationLimit === 0 表示无限制，不启动定时器
+    if (durationLimit > 0) {
+      this.maxDurationInterval = setInterval(() => {
+        if (!this.isRecording || this.isPaused) return
+        const d = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
+        if (d >= durationLimit) {
+          if (this.onMaxDurationReached) this.onMaxDurationReached()
+          clearInterval(this.maxDurationInterval)
+          this.maxDurationInterval = null
+        }
+      }, 1000)
+    }
 
     return this.recordingId
   }
@@ -123,7 +126,7 @@ export class AudioService {
     const time = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
     this.pitchData.push({ time, freq: correctedPitch, note })
 
-    const maxPoints = CONFIG.PITCH_DATA_SAMPLE_RATE * MAX_RECORDING_DURATION
+    const maxPoints = CONFIG.PITCH_DATA_SAMPLE_RATE * DEFAULT_MAX_DURATION
     if (this.pitchData.length > maxPoints) {
       this.pitchData = this.pitchData.slice(-maxPoints)
     }

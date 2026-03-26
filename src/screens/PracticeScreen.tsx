@@ -19,6 +19,7 @@ export function PracticeScreen({ navigation }: any) {
   const [customModes, setCustomModes] = useState<any[]>([])
   const [leftYAxisDisplay, setLeftYAxisDisplay] = useState<'english' | 'solfege' | 'number'>('english')
   const [rightYAxisDisplay, setRightYAxisDisplay] = useState<'english' | 'solfege' | 'number'>('english')
+  const [recordingDurationLimit, setRecordingDurationLimit] = useState(600)
   const [recordingId, setRecordingId] = useState<string | null>(null)
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [pitchData, setPitchData] = useState<any[]>([])
@@ -37,6 +38,7 @@ export function PracticeScreen({ navigation }: any) {
       setCustomModes(settings.customModes)
       setLeftYAxisDisplay(settings.leftYAxisDisplay)
       setRightYAxisDisplay(settings.rightYAxisDisplay)
+      setRecordingDurationLimit(settings.recordingDurationLimit)
     }
     loadData()
     const unsubscribe = navigation.addListener('focus', loadData)
@@ -99,7 +101,7 @@ export function PracticeScreen({ navigation }: any) {
         pauseRecording()
       })
 
-      const id = await audioService.startRecording()
+      const id = await audioService.startRecording(recordingDurationLimit)
       setRecordingId(id)
       setRecordingState('recording')
       setRecordingTime(0)

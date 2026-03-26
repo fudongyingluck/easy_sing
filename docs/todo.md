@@ -10,7 +10,7 @@
 - [ ] 以下设置项 UI 已有，但修改后不生效（只存储未接入逻辑）：
   - [ ] 触发音量：UI 可选 -50/-60/-70/-80 dB，但音频服务仍硬编码 `minVolume: -70`（`src/services/audio.ts`）
   - [ ] 音量过低停止检测：Toggle 已有，但录音逻辑中没有低音量检测和自动停止实现
-  - [ ] 录音时长限制：UI 可选 5/10/30 分钟/无限制，但音频服务仍读 `CONFIG.MAX_RECORDING_DURATION`（固定 600s）
+  - [x] 录音时长限制：UI 可选 5/10/30 分钟/无限制，已接入 audioService.startRecording(durationLimit)
   - [ ] 音高检测频率：UI 可选 50/100/200/400 Hz，但检测逻辑中 bufferSize 仍使用固定值 `CONFIG.YIN_BUFFER_SIZE`
   - [x] 音符名称显示方式：拆分为左 Y 轴和右 Y 轴两个独立配置，PitchChart 已接入（英文带八度、唱名/数字不带八度）
   - [x] Y 轴双侧显示：左右两侧都显示 Y 轴标注，且左右可以独立配置显示方式（如左侧英文、右侧唱名）
