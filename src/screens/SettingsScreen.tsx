@@ -651,6 +651,7 @@ export function SettingsScreen() {
         visible={activePicker === 'duration'}
         title="录音时长限制"
         options={[
+          { label: '1 分钟（测试用）', value: 60 },
           { label: '5 分钟', value: 300 },
           { label: '10 分钟（默认）', value: 600 },
           { label: '30 分钟', value: 1800 },

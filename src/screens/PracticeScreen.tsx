@@ -20,6 +20,7 @@ export function PracticeScreen({ navigation }: any) {
   const [leftYAxisDisplay, setLeftYAxisDisplay] = useState<'english' | 'solfege' | 'number'>('english')
   const [rightYAxisDisplay, setRightYAxisDisplay] = useState<'english' | 'solfege' | 'number'>('english')
   const [recordingDurationLimit, setRecordingDurationLimit] = useState(600)
+  const [reachedDurationLimit, setReachedDurationLimit] = useState(false)
   const [recordingId, setRecordingId] = useState<string | null>(null)
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [pitchData, setPitchData] = useState<any[]>([])
@@ -97,8 +98,15 @@ export function PracticeScreen({ navigation }: any) {
       })
 
       // 设置最大时长到达回调
+      setReachedDurationLimit(false)
       audioService.setOnMaxDurationReached(() => {
-        pauseRecording()
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current)
+          recordingTimerRef.current = null
+        }
+        setReachedDurationLimit(true)
+        setRecordingState('paused')
+        audioService.pauseRecording().catch(console.error)
       })
 
       const id = await audioService.startRecording(recordingDurationLimit)
@@ -118,7 +126,6 @@ export function PracticeScreen({ navigation }: any) {
   // 暂停录音
   const pauseRecording = async () => {
     try {
-      console.log('[Button] 暂停录音')
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current)
         recordingTimerRef.current = null
@@ -290,12 +297,14 @@ export function PracticeScreen({ navigation }: any) {
             </TouchableOpacity>
           )}
 
-          {/* 状态3：已暂停（Paused）- 显示三个按钮：继续、保存、放弃 */}
+          {/* 状态3：已暂停（Paused）- 显示继续（未达时限）、保存、放弃 */}
           {recordingState === 'paused' && (
             <View style={styles.pausedButtonsContainer}>
-              <TouchableOpacity style={[styles.controlButton, styles.pausedButton]} onPress={resumeRecording}>
-                <Text style={styles.controlButtonText}>继续</Text>
-              </TouchableOpacity>
+              {!reachedDurationLimit && (
+                <TouchableOpacity style={[styles.controlButton, styles.pausedButton]} onPress={resumeRecording}>
+                  <Text style={styles.controlButtonText}>继续</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={[styles.controlButton, styles.saveButton]} onPress={saveAndStopRecording}>
                 <Text style={styles.controlButtonText}>保存</Text>
               </TouchableOpacity>

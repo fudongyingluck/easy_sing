@@ -18,25 +18,28 @@
 ### 目录结构（以React Native为例）
 
 ```
-music_small_app/
+pitch_perfect/
 ├── src/
 │   ├── components/         # 通用组件
-│   │   ├── Piano/          # 虚拟钢琴组件
-│   │   └── PitchChart/     # 音高曲线图组件
+│   │   ├── Piano.tsx       # 虚拟钢琴组件
+│   │   └── PitchChart.tsx  # 音高曲线图组件
 │   ├── screens/            # 页面
-│   │   ├── MainScreen/     # 主界面
-│   │   ├── RecordingsScreen/ # 录音列表
-│   │   └── SettingsScreen/ # 自定义音域设置
+│   │   ├── PracticeScreen.tsx  # 主练习界面
+│   │   ├── RecordingsScreen.tsx # 录音列表
+│   │   └── SettingsScreen.tsx  # 设置页面
 │   ├── services/           # 服务层
-│   │   ├── AudioService.js # 音频处理服务
-│   │   ├── PitchDetector.js # 音高检测
-│   │   └── StorageService.js # 存储服务
+│   │   ├── audio.ts        # 音频处理服务（含音高检测）
+│   │   └── storage.ts      # 存储服务（AsyncStorage）
 │   ├── utils/              # 工具类
-│   │   ├── noteUtils.js    # 音符工具
-│   │   └── config.js       # 全局配置
-│   └── App.js              # 应用入口
+│   │   ├── noteUtils.ts    # 音符工具
+│   │   ├── audioUtils.ts   # 音频播放工具
+│   │   └── yin.ts          # YIN 音高检测算法
+│   ├── config/
+│   │   └── constants.ts    # 全局配置常量
+│   ├── types/
+│   │   └── index.ts        # TypeScript 类型定义
+│   └── App.tsx             # 应用入口
 ├── ios/                    # iOS原生代码
-├── android/                # Android原生代码
 └── package.json
 ```
 
@@ -46,18 +49,24 @@ music_small_app/
 
 ### 本地存储内容
 
-#### 1. 用户设置 (UserDefaults)
+#### 1. 用户设置 (AsyncStorage)
 ```javascript
 {
-  currentMode: 'male',        // 'male' | 'female' | 'custom'
+  currentModeId: 'female',    // 预设或自定义模式的 id
   customModes: [              // 用户自定义的模式列表
-    { id: 1, name: '我的高音区', startNote: 'C4', endNote: 'C6' }
+    { id: 'custom_1', name: '我的高音区', startNote: 'C4', endNote: 'C6' }
   ],
-  lastUpdated: '2024-01-15T14:30:00.000Z'
+  lastUpdated: '2024-01-15T14:30:00.000Z',
+  pitchDetectionRate: 100,    // 50 | 100 | 200 | 400 Hz（当前未接入检测逻辑）
+  triggerVolume: -70,         // 触发音量 dB（当前未接入检测逻辑）
+  recordingDurationLimit: 600, // 录音时长限制（秒），0 = 无限制
+  autoStopOnLowVolume: false,  // 音量过低停止检测（当前未实现）
+  leftYAxisDisplay: 'english', // 'english' | 'solfege' | 'number'
+  rightYAxisDisplay: 'english'
 }
 ```
 
-#### 2. 录音列表 (Core Data / Realm)
+#### 2. 录音列表 (AsyncStorage)
 ```javascript
 [
   {
@@ -141,19 +150,17 @@ async function shareRecording(filePath) {
 - **保存**：保存录音，回到空闲状态
 - **放弃**：丢弃录音，回到空闲状态
 
-#### 状态4：已保存（Stopped）
-- 显示单个按钮：`[ 重新 ]`
-- 点击开始新录音
-
 #### 状态流转图
 ```
 空闲 → 点击开始 → 录音中
 录音中 → 点击暂停 → 已暂停
+录音中 → 达到时长上限 → 自动暂停（仅显示保存/放弃）
 已暂停 → 点击继续 → 录音中
 已暂停 → 点击保存 → 保存录音 → 空闲
 已暂停 → 点击放弃 → 丢弃录音 → 空闲
-已保存 → 点击重新 → 空闲
 ```
+
+*注：已移除"已保存（Stopped）"状态，保存/放弃后直接回到空闲，不再有"重新"按钮。*
 
 #### 录音列表按钮
 - 录音列表功能暂时从主界面移除
@@ -181,38 +188,38 @@ async function shareRecording(filePath) {
 ## 开发计划
 
 ### 第一阶段：基础框架
-- [ ] 选择跨平台框架（React Native / Flutter / Taro）
-- [ ] 创建项目结构
-- [ ] 搭建基础页面框架
-- [ ] 实现页面导航
+- [x] 选择跨平台框架（React Native）
+- [x] 创建项目结构
+- [x] 搭建基础页面框架
+- [x] 实现页面导航（底部 Tab 导航：练习/录音/设置）
 
 ### 第二阶段：音频核心
-- [ ] 集成音频处理库
-- [ ] 实现 YIN 音高检测算法
-- [ ] 实现实时音频处理
-- [ ] 实现钢琴音效生成
+- [x] 集成音频处理库（react-native-pitchy）
+- [x] 实现 YIN 音高检测算法（src/utils/yin.ts）
+- [x] 实现实时音频处理（AudioService + Pitchy）
+- [x] 实现钢琴音效生成（audioUtils + 正弦波）
 
 ### 第三阶段：UI 界面
-- [ ] 实现主界面布局
-- [ ] 实现音高显示和曲线图
-- [ ] 实现三种模式切换
-- [ ] 实现双击检测
+- [x] 实现主界面布局
+- [x] 实现音高显示和曲线图（PitchChart，支持上下滑动、左右拖拽）
+- [x] 实现录音模式 / 钢琴模式切换
+- [x] 实现双击检测（双击钢琴区域切换模式）
 
 ### 第四阶段：虚拟钢琴
-- [ ] 实现钢琴组件
-- [ ] 实现钢琴点击发音
-- [ ] 实现钢琴滑动和滑块同步
+- [x] 实现钢琴组件（Piano.tsx）
+- [x] 实现钢琴点击发音
+- [x] 实现钢琴左右滑动和滑块同步
 
 ### 第五阶段：录音功能
-- [ ] 实现录音功能
-- [ ] 实现录音试听
-- [ ] 实现录音列表管理
+- [x] 实现录音功能（开始/暂停/继续/保存/放弃）
+- [x] 实现录音列表管理（RecordingsScreen）
+- [ ] 实现录音试听（历史录音播放暂无声音）
 - [ ] 实现系统分享功能
 
 ### 第六阶段：优化与测试
+- [x] 真机测试（iOS，已在设备上验证）
 - [ ] 性能优化
 - [ ] 兼容性测试（不同iOS版本）
-- [ ] Bug 修复
 - [ ] 配置开发者账号（如需要）
 
 ---
