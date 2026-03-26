@@ -12,6 +12,30 @@ const pixelsPerSemitone = 20
 const LINE_TIME_GAP = 0.25
 const LINE_SEMITONE_GAP = 3
 
+type NoteDisplay = 'english' | 'solfege' | 'number'
+
+const NOTE_TO_SOLFEGE: Record<string, string> = {
+  C: 'Do', D: 'Re', E: 'Mi', F: 'Fa', G: 'Sol', A: 'La', B: 'Si'
+}
+const NOTE_TO_NUMBER: Record<string, string> = {
+  C: '1', D: '2', E: '3', F: '4', G: '5', A: '6', B: '7'
+}
+const DISPLAY_SHOW_OCTAVE: Record<NoteDisplay, boolean> = {
+  english: true,
+  solfege: false,
+  number: false,
+}
+
+function formatNoteLabel(noteName: string, display: NoteDisplay): string {
+  if (display === 'english') return noteName
+  const match = noteName.match(/^([A-G])(#?)(\d+)$/)
+  if (!match) return noteName
+  const [, letter, , octave] = match
+  const noteMap = display === 'solfege' ? NOTE_TO_SOLFEGE : NOTE_TO_NUMBER
+  const base = noteMap[letter] ?? noteName
+  return DISPLAY_SHOW_OCTAVE[display] ? base + octave : base
+}
+
 interface PitchChartProps {
   data: PitchDataPoint[]
   minNote: string
@@ -20,9 +44,11 @@ interface PitchChartProps {
   height?: number
   currentTime?: number
   paused?: boolean
+  leftDisplay?: NoteDisplay
+  rightDisplay?: NoteDisplay
 }
 
-export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_CHART_DURATION, height, currentTime, paused }: PitchChartProps) {
+export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_CHART_DURATION, height, currentTime, paused, leftDisplay = 'english', rightDisplay = 'english' }: PitchChartProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const [initialScrollDone, setInitialScrollDone] = useState(false)
   const [timeOffset, setTimeOffset] = useState(0)
@@ -239,7 +265,7 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
             <SvgText key={`yl-${label.note}`}
               x={PADDING.left + 4} y={getMidiY(label.midi) + 4}
               fontSize={10} fill="#666" textAnchor="start">
-              {label.note}
+              {formatNoteLabel(label.note, leftDisplay)}
             </SvgText>
           ))}
 
@@ -247,7 +273,7 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
             <SvgText key={`yr-${label.note}`}
               x={windowWidth - PADDING.right - 4} y={getMidiY(label.midi) + 4}
               fontSize={10} fill="#666" textAnchor="end">
-              {label.note}
+              {formatNoteLabel(label.note, rightDisplay)}
             </SvgText>
           ))}
 

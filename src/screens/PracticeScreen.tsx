@@ -17,6 +17,8 @@ export function PracticeScreen({ navigation }: any) {
   const [recordingState, setRecordingState] = useState<RecordingState>('idle')
   const [currentModeId, setCurrentModeId] = useState<string>('female')
   const [customModes, setCustomModes] = useState<any[]>([])
+  const [leftYAxisDisplay, setLeftYAxisDisplay] = useState<'english' | 'solfege' | 'number'>('english')
+  const [rightYAxisDisplay, setRightYAxisDisplay] = useState<'english' | 'solfege' | 'number'>('english')
   const [recordingId, setRecordingId] = useState<string | null>(null)
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [pitchData, setPitchData] = useState<any[]>([])
@@ -33,6 +35,8 @@ export function PracticeScreen({ navigation }: any) {
       const settings = await loadUserSettings()
       setCurrentModeId(settings.currentModeId)
       setCustomModes(settings.customModes)
+      setLeftYAxisDisplay(settings.leftYAxisDisplay)
+      setRightYAxisDisplay(settings.rightYAxisDisplay)
     }
     loadData()
     const unsubscribe = navigation.addListener('focus', loadData)
@@ -253,6 +257,8 @@ export function PracticeScreen({ navigation }: any) {
               height={chartAreaHeight}
               currentTime={recordingTime}
               paused={recordingState === 'paused'}
+              leftDisplay={leftYAxisDisplay}
+              rightDisplay={rightYAxisDisplay}
             />
           </View>
         )}

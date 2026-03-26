@@ -10,7 +10,14 @@ const RECORDINGS_KEY = '@pitchperfect:recordings'
 const defaultSettings: UserSettings = {
   currentModeId: 'female',
   customModes: [],
-  lastUpdated: new Date().toISOString()
+  lastUpdated: new Date().toISOString(),
+  pitchDetectionRate: 100,
+  triggerVolume: -70,
+  recordingDurationLimit: 600,
+  autoStopOnLowVolume: false,
+  leftYAxisDisplay: 'english',
+  rightYAxisDisplay: 'english',
+  showBothYAxes: true,
 }
 
 // 初始化存储
@@ -32,7 +39,8 @@ export async function loadUserSettings(): Promise<UserSettings> {
   try {
     const data = await AsyncStorage.getItem(SETTINGS_KEY)
     if (data) {
-      return JSON.parse(data)
+      // 与默认值合并，保证旧数据也能获得新字段
+      return { ...defaultSettings, ...JSON.parse(data) }
     }
     return defaultSettings
   } catch (error) {
