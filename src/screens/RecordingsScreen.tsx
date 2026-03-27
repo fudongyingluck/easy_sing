@@ -81,29 +81,30 @@ export function RecordingsScreen({ navigation }: any) {
       return
     }
 
-    try {
-      // 正在播放同一条 → 暂停
-      if (playingId === recording.id) {
-        audioService.pausePlayback()
-        setPausedId(recording.id)
-        setPlayingId(null)
-        return
-      }
+    // 正在播放同一条 → 暂停
+    if (playingId === recording.id) {
+      audioService.pausePlayback()
+      setPausedId(recording.id)
+      setPlayingId(null)
+      return
+    }
 
-      // 已暂停同一条 → 继续
-      if (pausedId === recording.id) {
-        setPausedId(null)
-        setPlayingId(recording.id)
-        audioService.resumePlayback((time) => setCurrentTime(time))
-        return
-      }
-
-      // 停止之前播放的（如有），开始新的
-      audioService.stopPlayback()
-      setPlayingId(recording.id)
+    // 已暂停同一条 → 继续
+    if (pausedId === recording.id) {
       setPausedId(null)
-      setCurrentTime(0)
+      setPlayingId(recording.id)
+      audioService.resumePlayback((time) => setCurrentTime(time))
+      return
+    }
 
+    // 停止之前播放的（如有），开始新的
+    audioService.stopPlayback()
+    const targetId = recording.id
+    setPlayingId(targetId)
+    setPausedId(null)
+    setCurrentTime(0)
+
+    try {
       await audioService.playAudio(
         recording.audioFilePath,
         (time) => setCurrentTime(time)
@@ -112,7 +113,8 @@ export function RecordingsScreen({ navigation }: any) {
       console.error('Failed to play recording:', error)
       Alert.alert('播放失败', '无法播放此录音')
     } finally {
-      setPlayingId(null)
+      // 只有当前还是这条录音在播放时才清除状态（防止新播放被误清除）
+      setPlayingId(prev => prev === targetId ? null : prev)
       setCurrentTime(0)
     }
   }

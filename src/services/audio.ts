@@ -124,6 +124,7 @@ export class AudioService {
   }
 
   private async stopAll(): Promise<string> {
+    this.stopPlayback()
     if (this.pitchSubscription) {
       this.pitchSubscription.remove()
       this.pitchSubscription = null
@@ -132,14 +133,22 @@ export class AudioService {
       clearInterval(this.maxDurationInterval)
       this.maxDurationInterval = null
     }
-    const audioPath = await nativePitchRecorder.stopRecording()
+    const [filename, dir] = await Promise.all([
+      nativePitchRecorder.stopRecording(),
+      nativePitchRecorder.getRecordingsDirectory(),
+    ])
     await nativePitchRecorder.stopDetection()
-    return audioPath
+    return filename ? `${dir}/${filename}` : ''
   }
 
   async playAudio(filePath: string, onProgress?: (time: number) => void): Promise<void> {
     this.stopPlayback()
-    NativeModules.AudioSessionModule?.resetForPlayback()
+    NativeModules.AudioSessionModule?.activateForRecordingPlayback?.()
+
+    // 用当前目录重建路径，修复重装 App 后 UUID 变化导致路径失效的问题
+    const filename = filePath.split('/').pop() ?? filePath
+    const dir = await nativePitchRecorder.getRecordingsDirectory()
+    const resolvedPath = filename ? `${dir}/${filename}` : filePath
 
     // 懒加载，避免模块初始化时修改 AVAudioSession 影响录音
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -147,7 +156,7 @@ export class AudioService {
     const Sound = SoundModule.default ?? SoundModule
 
     return new Promise((resolve, reject) => {
-      const sound = new Sound(filePath, '', (error: any) => {
+      const sound = new Sound(resolvedPath, '', (error: any) => {
         if (error) { reject(error); return }
 
         this.playbackSound = sound
@@ -178,7 +187,7 @@ export class AudioService {
 
   resumePlayback(onProgress?: (time: number) => void): void {
     if (!this.playbackSound) return
-    NativeModules.AudioSessionModule?.resetForPlayback()
+    NativeModules.AudioSessionModule?.activateForRecordingPlayback?.()
     if (onProgress) {
       this.playbackTimer = setInterval(() => {
         this.playbackSound?.getCurrentTime((seconds: number) => onProgress(seconds))

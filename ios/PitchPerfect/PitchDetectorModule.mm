@@ -255,9 +255,20 @@ RCT_EXPORT_METHOD(stopRecording:(RCTPromiseResolveBlock)resolve
   _recordingFile = nil;
   [_recordingLock unlock];
 
-  NSString *path = _recordingPath ?: @"";
+  NSString *filename = [_recordingPath lastPathComponent] ?: @"";
   _recordingPath = nil;
-  resolve(path);
+  resolve(filename);
+}
+
+RCT_EXPORT_METHOD(getRecordingsDirectory:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
+  NSString *dir = [cacheDir stringByAppendingPathComponent:@"PitchPerfect"];
+  [[NSFileManager defaultManager] createDirectoryAtPath:dir
+                              withIntermediateDirectories:YES
+                                               attributes:nil
+                                                    error:nil];
+  resolve(dir);
 }
 
 // ---------------------------------------------------------------------------

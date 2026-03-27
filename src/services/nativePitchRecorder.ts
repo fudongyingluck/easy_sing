@@ -16,9 +16,13 @@ export const nativePitchRecorder = {
   startRecording: (): Promise<string> =>
     PitchDetectorModule.startRecording(),
 
-  /** 停止写文件，返回最终文件路径 */
+  /** 停止写文件，返回文件名（不含目录） */
   stopRecording: (): Promise<string> =>
     PitchDetectorModule.stopRecording(),
+
+  /** 返回录音文件所在目录的当前完整路径 */
+  getRecordingsDirectory: (): Promise<string> =>
+    PitchDetectorModule.getRecordingsDirectory(),
 
   /** 暂停写文件（引擎继续运行） */
   pauseRecording: (): void =>
