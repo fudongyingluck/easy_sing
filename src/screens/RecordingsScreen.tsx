@@ -9,6 +9,7 @@ import { audioService } from '../services/audio'
 export function RecordingsScreen({ navigation }: any) {
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [playingId, setPlayingId] = useState<string | null>(null)
+  const [pausedId, setPausedId] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(0)
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -81,13 +82,26 @@ export function RecordingsScreen({ navigation }: any) {
     }
 
     try {
-      if (playingId) {
-        audioService.stopPlayback()
+      // 正在播放同一条 → 暂停
+      if (playingId === recording.id) {
+        audioService.pausePlayback()
+        setPausedId(recording.id)
         setPlayingId(null)
         return
       }
 
+      // 已暂停同一条 → 继续
+      if (pausedId === recording.id) {
+        setPausedId(null)
+        setPlayingId(recording.id)
+        audioService.resumePlayback((time) => setCurrentTime(time))
+        return
+      }
+
+      // 停止之前播放的（如有），开始新的
+      audioService.stopPlayback()
       setPlayingId(recording.id)
+      setPausedId(null)
       setCurrentTime(0)
 
       await audioService.playAudio(
@@ -137,9 +151,10 @@ export function RecordingsScreen({ navigation }: any) {
           text: '删除',
           style: 'destructive',
           onPress: async () => {
-            if (playingId === recording.id) {
+            if (playingId === recording.id || pausedId === recording.id) {
               audioService.stopPlayback()
               setPlayingId(null)
+              setPausedId(null)
             }
             await deleteRecordingFiles(recording)
             const updatedList = recordings.filter(r => r.id !== recording.id)
@@ -165,9 +180,10 @@ export function RecordingsScreen({ navigation }: any) {
           style: 'destructive',
           onPress: async () => {
             // 停止正在播放的录音（如果在删除列表中）
-            if (playingId && selectedIds.has(playingId)) {
+            if ((playingId && selectedIds.has(playingId)) || (pausedId && selectedIds.has(pausedId))) {
               audioService.stopPlayback()
               setPlayingId(null)
+              setPausedId(null)
             }
 
             // 删除选中的录音文件
@@ -267,7 +283,7 @@ export function RecordingsScreen({ navigation }: any) {
                       onPress={() => playRecording(recording)}
                     >
                       <Text style={styles.actionButtonText}>
-                        {playingId === recording.id ? '⏸' : '▶'}
+                        {playingId === recording.id ? '⏸' : pausedId === recording.id ? '▶' : '▶'}
                       </Text>
                     </TouchableOpacity>
 
@@ -288,7 +304,7 @@ export function RecordingsScreen({ navigation }: any) {
                 )}
               </TouchableOpacity>
 
-              {playingId === recording.id && (
+              {(playingId === recording.id || pausedId === recording.id) && (
                 <View style={styles.progressBar}>
                   <View style={[styles.progressFill, { width: `${Math.min(100, (currentTime / Math.max(1, recording.duration)) * 100)}%` }]} />
                 </View>

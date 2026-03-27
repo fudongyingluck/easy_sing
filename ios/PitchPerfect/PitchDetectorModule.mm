@@ -284,9 +284,12 @@ RCT_EXPORT_METHOD(resumeRecording) {
   _recordingFile = nil;
   [_recordingLock unlock];
   _recordingPath = nil;
-  [_engine.inputNode removeTapOnBus:0];
-  [_engine stop];
+  AVAudioEngine *engine = _engine;
   _engine = nil;
+  if (engine) {
+    [engine.inputNode removeTapOnBus:0];
+    [engine stop];
+  }
   [[AVAudioSession sharedInstance] setActive:NO
                                  withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
                                        error:nil];

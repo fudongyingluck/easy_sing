@@ -2,6 +2,7 @@ import { PitchData, PitchDataPoint } from '../types'
 import { CONFIG } from '../config/constants'
 import { midiToNoteName } from '../utils/noteUtils'
 import { nativePitchRecorder } from './nativePitchRecorder'
+import { NativeModules } from 'react-native'
 
 const DEFAULT_MAX_DURATION = CONFIG.MAX_RECORDING_DURATION
 
@@ -19,6 +20,11 @@ export class AudioService {
   private pitchSubscription: any = null
   private maxDurationInterval: any = null
   private pitchWindow: number[] = []
+
+  // 播放
+  private playbackSound: any = null
+  private playbackTimer: any = null
+  private playbackResolve: (() => void) | null = null
 
   setOnPitchDataUpdate(callback: ((data: PitchDataPoint[]) => void) | null) {
     this.onPitchDataUpdate = callback
@@ -132,20 +138,78 @@ export class AudioService {
   }
 
   async playAudio(filePath: string, onProgress?: (time: number) => void): Promise<void> {
-    // TODO: 用 react-native-sound 播放 WAV 文件
-    return new Promise((resolve) => {
-      let t = 0
-      const iv = setInterval(() => {
-        t += 0.1
-        if (onProgress) onProgress(t)
-        if (t >= 10) { clearInterval(iv); resolve() }
-      }, 100)
+    this.stopPlayback()
+    NativeModules.AudioSessionModule?.resetForPlayback()
+
+    // 懒加载，避免模块初始化时修改 AVAudioSession 影响录音
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const SoundModule = require('react-native-sound')
+    const Sound = SoundModule.default ?? SoundModule
+
+    return new Promise((resolve, reject) => {
+      const sound = new Sound(filePath, '', (error: any) => {
+        if (error) { reject(error); return }
+
+        this.playbackSound = sound
+        this.playbackResolve = resolve
+
+        if (onProgress) {
+          this.playbackTimer = setInterval(() => {
+            sound.getCurrentTime((seconds: number) => onProgress(seconds))
+          }, 100)
+        }
+
+        sound.play(() => {
+          // 播放结束（正常结束或被 stop 打断）统一 resolve
+          this._clearPlayback()
+          resolve()
+        })
+      })
     })
   }
 
-  pausePlayback(): void {}
-  stopPlayback(): void {}
-  seekTo(time: number): void {}
+  pausePlayback(): void {
+    this.playbackSound?.pause()
+    if (this.playbackTimer) {
+      clearInterval(this.playbackTimer)
+      this.playbackTimer = null
+    }
+  }
+
+  resumePlayback(onProgress?: (time: number) => void): void {
+    if (!this.playbackSound) return
+    NativeModules.AudioSessionModule?.resetForPlayback()
+    if (onProgress) {
+      this.playbackTimer = setInterval(() => {
+        this.playbackSound?.getCurrentTime((seconds: number) => onProgress(seconds))
+      }, 100)
+    }
+    this.playbackSound.play(() => {
+      this._clearPlayback()
+      this.playbackResolve?.()
+    })
+  }
+
+  stopPlayback(): void {
+    if (this.playbackSound) {
+      this.playbackSound.stop()
+      this.playbackSound.release()
+    }
+    this._clearPlayback()
+  }
+
+  seekTo(time: number): void {
+    this.playbackSound?.setCurrentTime(time)
+  }
+
+  private _clearPlayback(): void {
+    if (this.playbackTimer) {
+      clearInterval(this.playbackTimer)
+      this.playbackTimer = null
+    }
+    this.playbackSound = null
+    this.playbackResolve = null
+  }
 
   getCurrentPitchData(): PitchDataPoint[] {
     return [...this.pitchData]
