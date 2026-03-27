@@ -1,11 +1,9 @@
 import { PitchData, PitchDataPoint } from '../types'
 import { CONFIG } from '../config/constants'
 import { midiToNoteName } from '../utils/noteUtils'
-import Pitchy from 'react-native-pitchy'
+import { nativePitchRecorder } from './nativePitchRecorder'
 
 const DEFAULT_MAX_DURATION = CONFIG.MAX_RECORDING_DURATION
-
-const PITCHY_CONFIG = { bufferSize: 512, minVolume: -70 }
 
 export class AudioService {
   private recordingId: string | null = null
@@ -20,12 +18,7 @@ export class AudioService {
 
   private pitchSubscription: any = null
   private maxDurationInterval: any = null
-  private pitchWindow: number[] = []  // 滑动窗口，存最近 N 个原始频率，用于中值纠正
-
-  constructor() {
-    // JS reload 后 Pitchy native 状态可能残留，强制清理以释放 audio session
-    try { Pitchy.stop() } catch {}
-  }
+  private pitchWindow: number[] = []
 
   setOnPitchDataUpdate(callback: ((data: PitchDataPoint[]) => void) | null) {
     this.onPitchDataUpdate = callback
@@ -36,7 +29,7 @@ export class AudioService {
   }
 
   async startRecording(durationLimit: number = DEFAULT_MAX_DURATION): Promise<string> {
-    this.stopAll()
+    await this.stopAll()
 
     this.recordingId = `rec_${Date.now()}`
     this.pitchData = []
@@ -46,11 +39,13 @@ export class AudioService {
     this.isRecording = true
     this.isPaused = false
 
-    Pitchy.init(PITCHY_CONFIG)
-    this.pitchSubscription = Pitchy.addListener(this.onPitchEvent)
-    await Pitchy.start()
+    await nativePitchRecorder.startDetection()
+    await nativePitchRecorder.startRecording()
 
-    // durationLimit === 0 表示无限制，不启动定时器
+    this.pitchSubscription = nativePitchRecorder.addPitchListener((freq) => {
+      this.onPitchEvent(freq)
+    })
+
     if (durationLimit > 0) {
       this.maxDurationInterval = setInterval(() => {
         if (!this.isRecording || this.isPaused) return
@@ -70,12 +65,7 @@ export class AudioService {
     if (this.isRecording && !this.isPaused) {
       this.isPaused = true
       this.pauseStartTime = Date.now()
-      // 释放麦克风，让 audio session 恢复为可播放状态
-      if (this.pitchSubscription) {
-        this.pitchSubscription.remove()
-        this.pitchSubscription = null
-      }
-      try { await Pitchy.stop() } catch {}
+      nativePitchRecorder.pauseRecording()
     }
   }
 
@@ -83,21 +73,19 @@ export class AudioService {
     if (this.isRecording && this.isPaused) {
       this.isPaused = false
       this.totalPausedTime += Date.now() - this.pauseStartTime
-      // 重新初始化并启动麦克风
-      Pitchy.init(PITCHY_CONFIG)
-      this.pitchSubscription = Pitchy.addListener(this.onPitchEvent)
-      await Pitchy.start()
+      nativePitchRecorder.resumeRecording()
     }
   }
 
   async stopRecording(): Promise<{ audioPath: string; duration: number; pitchData: PitchData }> {
-    this.stopAll()
+    const audioPath = await this.stopAll()
     this.isRecording = false
     this.isPaused = false
 
     const duration = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
+
     return {
-      audioPath: '',
+      audioPath,
       duration: Math.round(duration),
       pitchData: {
         version: 1,
@@ -108,47 +96,43 @@ export class AudioService {
     }
   }
 
-  private onPitchEvent = ({ pitch }: { pitch: number }) => {
+  private onPitchEvent(freq: number) {
     if (!this.isRecording || this.isPaused) return
-    if (pitch < 60 || pitch > 1400) return
+    if (freq < 60 || freq > 1400) return
 
-    // 中值纠正：维护最近 9 个原始频率的滑动窗口
-    this.pitchWindow.push(pitch)
+    this.pitchWindow.push(freq)
     if (this.pitchWindow.length > 9) this.pitchWindow.shift()
     const sorted = [...this.pitchWindow].sort((a, b) => a - b)
     const median = sorted[Math.floor(sorted.length / 2)]
-    // 仅纠正倍频/半频异常，保留正常抖动（颤音）
-    const correctedPitch = (pitch > median * 1.25 || pitch < median / 1.25) ? median : pitch
+    const corrected = (freq > median * 1.25 || freq < median / 1.25) ? median : freq
 
-    const midi = Math.round(12 * Math.log2(correctedPitch / 440) + 69)
+    const midi = Math.round(12 * Math.log2(corrected / 440) + 69)
     const note = midiToNoteName(midi)
-
     const time = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
-    this.pitchData.push({ time, freq: correctedPitch, note })
 
-    const maxPoints = CONFIG.PITCH_DATA_SAMPLE_RATE * DEFAULT_MAX_DURATION
-    if (this.pitchData.length > maxPoints) {
-      this.pitchData = this.pitchData.slice(-maxPoints)
-    }
+    this.pitchData.push({ time, freq: corrected, note })
 
     if (this.onPitchDataUpdate) {
       this.onPitchDataUpdate([...this.pitchData])
     }
   }
 
-  private stopAll() {
+  private async stopAll(): Promise<string> {
     if (this.pitchSubscription) {
       this.pitchSubscription.remove()
       this.pitchSubscription = null
     }
-    try { Pitchy.stop() } catch {}
     if (this.maxDurationInterval) {
       clearInterval(this.maxDurationInterval)
       this.maxDurationInterval = null
     }
+    const audioPath = await nativePitchRecorder.stopRecording()
+    await nativePitchRecorder.stopDetection()
+    return audioPath
   }
 
   async playAudio(filePath: string, onProgress?: (time: number) => void): Promise<void> {
+    // TODO: 用 react-native-sound 播放 WAV 文件
     return new Promise((resolve) => {
       let t = 0
       const iv = setInterval(() => {

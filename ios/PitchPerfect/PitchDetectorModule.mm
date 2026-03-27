@@ -15,7 +15,6 @@ static float yin_detect(const float *buf, int N, float sampleRate, float thresho
   int windowLen = N - maxPeriod;   // fixed window length for all tau
 
   // --- Step 2: difference function d[tau], tau in [1, maxPeriod] ---
-  // We must compute ALL tau from 1 for correct CMND normalization.
   float *d = (float *)malloc((maxPeriod + 1) * sizeof(float));
   if (!d) return 0.0f;
   d[0] = 0.0f;
@@ -42,7 +41,6 @@ static float yin_detect(const float *buf, int N, float sampleRate, float thresho
   int bestTau = -1;
   for (int tau = minPeriod; tau <= maxPeriod - 1; tau++) {
     if (cmnd[tau] < threshold) {
-      // Find local minimum
       while (tau + 1 <= maxPeriod && cmnd[tau + 1] < cmnd[tau]) tau++;
       bestTau = tau;
       break;
@@ -82,9 +80,14 @@ static float rms_level(const float *buf, int N) {
   AVAudioEngine *_engine;
   BOOL _running;
   float _sampleRate;
-  // Pitch stability: keep last few valid frequencies for median smoothing
+  // Pitch stability
   float _history[5];
   int   _historyCount;
+  // Recording
+  AVAudioFile *_recordingFile;
+  BOOL         _isRecordingAudio;
+  NSString    *_recordingPath;
+  NSLock      *_recordingLock;
 }
 
 RCT_EXPORT_MODULE(PitchDetectorModule)
@@ -97,8 +100,6 @@ RCT_EXPORT_MODULE(PitchDetectorModule)
   return NO;
 }
 
-// New architecture (bridgeless): must call super so _listenerCount is incremented,
-// otherwise sendEventWithName silently drops all events.
 RCT_EXPORT_METHOD(addListener:(NSString *)eventName) {
   [super addListener:eventName];
 }
@@ -107,6 +108,9 @@ RCT_EXPORT_METHOD(removeListeners:(double)count) {
   [super removeListeners:count];
 }
 
+// ---------------------------------------------------------------------------
+// startDetection
+// ---------------------------------------------------------------------------
 RCT_EXPORT_METHOD(startDetection:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
   if (_running) { resolve(nil); return; }
@@ -122,13 +126,13 @@ RCT_EXPORT_METHOD(startDetection:(RCTPromiseResolveBlock)resolve
   if (error) { reject(@"session_error", @"AVAudioSession activate failed", error); return; }
 
   _engine = [[AVAudioEngine alloc] init];
+  _recordingLock = [[NSLock alloc] init];
   AVAudioInputNode *inputNode = _engine.inputNode;
   AVAudioFormat *format = [inputNode outputFormatForBus:0];
   _sampleRate = (float)format.sampleRate;
   _historyCount = 0;
   memset(_history, 0, sizeof(_history));
 
-  // 2048 @ 48kHz ≈ 42 ms/callback ≈ 23 callbacks/sec
   AVAudioFrameCount bufferSize = 2048;
 
   __weak PitchDetectorModule *weakSelf = self;
@@ -139,11 +143,21 @@ RCT_EXPORT_METHOD(startDetection:(RCTPromiseResolveBlock)resolve
 
     float *samples = buffer.floatChannelData[0];
     int frames = (int)buffer.frameLength;
-    float sr = self->_sampleRate;
 
-    // Gate silence
+    // --- Recording ---
+    if (self->_isRecordingAudio) {
+      [self->_recordingLock lock];
+      if (self->_recordingFile) {
+        NSError *writeError = nil;
+        [self->_recordingFile writeFromBuffer:buffer error:&writeError];
+      }
+      [self->_recordingLock unlock];
+    }
+
+    // --- Pitch detection ---
+    float sr = self->_sampleRate;
     if (rms_level(samples, frames) < 0.008f) {
-      self->_historyCount = 0;  // reset stability on silence
+      self->_historyCount = 0;
       return;
     }
 
@@ -153,18 +167,12 @@ RCT_EXPORT_METHOD(startDetection:(RCTPromiseResolveBlock)resolve
       return;
     }
 
-    // Stability filter: reject if > 1 octave jump from recent median
     if (self->_historyCount > 0) {
-      // Quick median of last valid values
       float ref = self->_history[(self->_historyCount - 1) % 5];
       float ratio = freq / ref;
-      if (ratio < 0.5f || ratio > 2.0f) {
-        // Likely an octave error or noise – skip
-        return;
-      }
+      if (ratio < 0.5f || ratio > 2.0f) return;
     }
 
-    // Store in ring history
     self->_history[self->_historyCount % 5] = freq;
     self->_historyCount++;
 
@@ -179,15 +187,103 @@ RCT_EXPORT_METHOD(startDetection:(RCTPromiseResolveBlock)resolve
   resolve(nil);
 }
 
+// ---------------------------------------------------------------------------
+// stopDetection
+// ---------------------------------------------------------------------------
 RCT_EXPORT_METHOD(stopDetection:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
   [self _stop];
   resolve(nil);
 }
 
+// ---------------------------------------------------------------------------
+// startRecording — call after startDetection
+// ---------------------------------------------------------------------------
+RCT_EXPORT_METHOD(startRecording:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  if (!_running) {
+    reject(@"not_running", @"Call startDetection first", nil);
+    return;
+  }
+
+  NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
+  NSString *dir = [cacheDir stringByAppendingPathComponent:@"PitchPerfect"];
+  [[NSFileManager defaultManager] createDirectoryAtPath:dir
+                              withIntermediateDirectories:YES
+                                               attributes:nil
+                                                    error:nil];
+
+  NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+  fmt.dateFormat = @"yyyyMMdd_HHmmss_SSS";
+  NSString *filename = [NSString stringWithFormat:@"recording_%@.wav", [fmt stringFromDate:[NSDate date]]];
+  _recordingPath = [dir stringByAppendingPathComponent:filename];
+
+  // Use input format — AVAudioFile handles float→int16 conversion automatically
+  AVAudioFormat *inputFormat = [_engine.inputNode outputFormatForBus:0];
+  NSDictionary *settings = @{
+    AVFormatIDKey:             @(kAudioFormatLinearPCM),
+    AVSampleRateKey:           @(inputFormat.sampleRate),
+    AVNumberOfChannelsKey:     @(inputFormat.channelCount),
+    AVLinearPCMBitDepthKey:    @(16),
+    AVLinearPCMIsFloatKey:     @(NO),
+    AVLinearPCMIsBigEndianKey: @(NO),
+  };
+
+  NSError *error = nil;
+  NSURL *url = [NSURL fileURLWithPath:_recordingPath];
+  AVAudioFile *file = [[AVAudioFile alloc] initForWriting:url settings:settings error:&error];
+  if (error || !file) {
+    reject(@"file_error", @"Could not create recording file", error);
+    return;
+  }
+
+  [_recordingLock lock];
+  _recordingFile = file;
+  _isRecordingAudio = YES;
+  [_recordingLock unlock];
+
+  resolve(_recordingPath);
+}
+
+// ---------------------------------------------------------------------------
+// stopRecording — returns file path
+// ---------------------------------------------------------------------------
+RCT_EXPORT_METHOD(stopRecording:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  _isRecordingAudio = NO;
+  [_recordingLock lock];
+  _recordingFile = nil;
+  [_recordingLock unlock];
+
+  NSString *path = _recordingPath ?: @"";
+  _recordingPath = nil;
+  resolve(path);
+}
+
+// ---------------------------------------------------------------------------
+// pauseRecording / resumeRecording
+// ---------------------------------------------------------------------------
+RCT_EXPORT_METHOD(pauseRecording) {
+  _isRecordingAudio = NO;
+}
+
+RCT_EXPORT_METHOD(resumeRecording) {
+  if (_recordingFile) {
+    _isRecordingAudio = YES;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Internal stop
+// ---------------------------------------------------------------------------
 - (void)_stop {
   if (!_running) return;
   _running = NO;
+  _isRecordingAudio = NO;
+  [_recordingLock lock];
+  _recordingFile = nil;
+  [_recordingLock unlock];
+  _recordingPath = nil;
   [_engine.inputNode removeTapOnBus:0];
   [_engine stop];
   _engine = nil;

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { View, StyleSheet, useWindowDimensions, PanResponder, ScrollView } from 'react-native'
-import Svg, { Line, Text as SvgText, Path, Circle, Rect, Defs, LinearGradient, Stop } from 'react-native-svg'
+import Svg, { Line, Text as SvgText, Path, Circle, Rect, Defs, LinearGradient, Stop, ClipPath, G } from 'react-native-svg'
 import { PitchDataPoint } from '../types'
 import { noteNameToMidi, midiToNoteName } from '../utils/noteUtils'
 import { CONFIG } from '../config/constants'
@@ -141,7 +141,13 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
   const latestTime = Math.max(currentTime ?? 0, dataLatestTime)
   const now = Math.max(duration, latestTime - timeOffset)
   const startTime = Math.max(0, now - duration)
-  const filteredData = data.filter(p => p.time >= startTime && p.time <= now && p.freq > 0)
+  // 找到 startTime 之前最近的一个有效点作为左侧锚点，防止线段在靠近左边缘时因点数不足而消失
+  let leftAnchor: PitchDataPoint | null = null
+  for (let i = data.length - 1; i >= 0; i--) {
+    if (data[i].time < startTime && data[i].freq > 0) { leftAnchor = data[i]; break }
+  }
+  const inViewData = data.filter(p => p.time >= startTime && p.time <= now && p.freq > 0)
+  const filteredData = leftAnchor ? [leftAnchor, ...inViewData] : inViewData
 
   const timeToX = (time: number) =>
     PADDING.left + ((time - startTime) / duration) * chartWidth
@@ -245,6 +251,9 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
               <Stop offset="85%" stopColor="#007AFF" stopOpacity="1" />
               <Stop offset="100%" stopColor="#99C5FF" stopOpacity="1" />
             </LinearGradient>
+            <ClipPath id="chartClip">
+              <Rect x={PADDING.left} y={0} width={chartWidth} height={svgHeight} />
+            </ClipPath>
           </Defs>
           <Rect x={0} y={PADDING.top} width={windowWidth} height={svgHeight - PADDING.top - PADDING.bottom} fill="#f5f5f5" />
           {xAxisLabels.map(t => (
@@ -277,15 +286,17 @@ export function PitchChart({ data, minNote, maxNote, duration = CONFIG.DEFAULT_C
             </SvgText>
           ))}
 
-          {dots.map((d, i) => (
-            <Circle key={`dot-${i}`} cx={d.x} cy={d.y} r={1.5} fill="rgba(0,122,255,0.5)" />
-          ))}
+          <G clipPath="url(#chartClip)">
+            {dots.map((d, i) => (
+              <Circle key={`dot-${i}`} cx={d.x} cy={d.y} r={1.5} fill="rgba(0,122,255,0.5)" />
+            ))}
 
-          {segmentPaths.map((path, i) => (
-            <Path key={`seg-${i}`}
-              d={path} fill="none" stroke="url(#pitchGradient)" strokeWidth={2.5}
-              strokeLinecap="round" strokeLinejoin="round" />
-          ))}
+            {segmentPaths.map((path, i) => (
+              <Path key={`seg-${i}`}
+                d={path} fill="none" stroke="url(#pitchGradient)" strokeWidth={2.5}
+                strokeLinecap="round" strokeLinejoin="round" />
+            ))}
+          </G>
         </Svg>
       </ScrollView>
 

@@ -532,8 +532,7 @@ export function SettingsScreen() {
   ]
 
   const durationLabel =
-    settings.recordingDurationLimit === 0 ? '无限制'
-    : settings.recordingDurationLimit >= 60 ? `${settings.recordingDurationLimit / 60} 分钟`
+    settings.recordingDurationLimit >= 60 ? `${settings.recordingDurationLimit / 60} 分钟`
     : `${settings.recordingDurationLimit} 秒`
 
   return (
@@ -655,7 +654,7 @@ export function SettingsScreen() {
           { label: '5 分钟', value: 300 },
           { label: '10 分钟（默认）', value: 600 },
           { label: '30 分钟', value: 1800 },
-          { label: '无限制', value: 0 },
+          { label: '60 分钟', value: 3600 },
         ]}
         selected={settings.recordingDurationLimit}
         onSelect={v => save({ ...settings, recordingDurationLimit: v })}
