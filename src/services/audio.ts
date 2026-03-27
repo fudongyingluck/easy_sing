@@ -143,7 +143,7 @@ export class AudioService {
 
   async playAudio(filePath: string, onProgress?: (time: number) => void): Promise<void> {
     this.stopPlayback()
-    NativeModules.AudioSessionModule?.activateForRecordingPlayback?.()
+    NativeModules.AudioSessionModule?.resetForPlayback?.()
 
     // 用当前目录重建路径，修复重装 App 后 UUID 变化导致路径失效的问题
     const filename = filePath.split('/').pop() ?? filePath
@@ -170,6 +170,7 @@ export class AudioService {
 
         sound.play(() => {
           // 播放结束（正常结束或被 stop 打断）统一 resolve
+          sound.release()
           this._clearPlayback()
           resolve()
         })
@@ -179,21 +180,18 @@ export class AudioService {
 
   pausePlayback(): void {
     this.playbackSound?.pause()
-    if (this.playbackTimer) {
-      clearInterval(this.playbackTimer)
-      this.playbackTimer = null
-    }
   }
 
   resumePlayback(onProgress?: (time: number) => void): void {
     if (!this.playbackSound) return
-    NativeModules.AudioSessionModule?.activateForRecordingPlayback?.()
+    NativeModules.AudioSessionModule?.resetForPlayback?.()
     if (onProgress) {
       this.playbackTimer = setInterval(() => {
         this.playbackSound?.getCurrentTime((seconds: number) => onProgress(seconds))
       }, 100)
     }
     this.playbackSound.play(() => {
+      this.playbackSound?.release()
       this._clearPlayback()
       this.playbackResolve?.()
     })

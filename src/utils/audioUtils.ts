@@ -61,7 +61,6 @@ class AudioPlayer {
 
   async playNote(noteName: string, duration: number = 0.5): Promise<void> {
     console.log(`[AudioPlayer] playNote: ${noteName}`)
-    AudioSessionModule?.resetForPlayback()
     const sound = await this.loadSound(noteName)
     if (sound) {
       console.log(`[AudioPlayer] playNote: got sound, calling play()`)

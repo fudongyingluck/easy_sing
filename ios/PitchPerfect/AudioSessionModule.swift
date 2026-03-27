@@ -9,14 +9,14 @@ class AudioSessionModule: NSObject {
   // 用于钢琴音效：在录音 session 内混音播放
   @objc func resetForPlayback() {
     let session = AVAudioSession.sharedInstance()
-    try? session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .mixWithOthers])
+    try? session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .mixWithOthers, .allowBluetooth, .allowBluetoothA2DP])
     try? session.setActive(true)
   }
 
-  // 用于历史录音播放：纯播放模式，支持耳机/蓝牙，不强制走扬声器
+  // 用于历史录音播放：与钢琴共用同一 session，避免类别切换导致的路由冲突
   @objc func activateForRecordingPlayback() {
     let session = AVAudioSession.sharedInstance()
-    try? session.setCategory(.playback, mode: .default, options: [.allowBluetooth, .allowBluetoothA2DP])
+    try? session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .mixWithOthers])
     try? session.setActive(true)
   }
 }
