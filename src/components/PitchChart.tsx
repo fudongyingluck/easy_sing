@@ -4,6 +4,7 @@ import { PitchDataPoint } from '../types'
 import { noteNameToMidi } from '../utils/noteUtils'
 import { CONFIG } from '../config/constants'
 import { PitchCanvas, PitchXAxis, X_AXIS_HEIGHT, PADDING, pixelsPerSemitone, NoteDisplay } from './PitchCanvas'
+import { useTheme } from '../context/ThemeContext'
 
 export type { NoteDisplay }
 
@@ -36,6 +37,7 @@ export function PitchChart({
   leftDisplay = 'english',
   rightDisplay = 'english',
 }: PitchChartProps) {
+  const { colors } = useTheme()
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const [initialScrollDone, setInitialScrollDone] = useState(false)
   const [timeOffset, setTimeOffset] = useState(0)
@@ -160,7 +162,7 @@ export function PitchChart({
   ).current
 
   return (
-    <View style={[styles.container, { height: chartHeight, width: windowWidth }]}>
+    <View style={[styles.container, { height: chartHeight, width: windowWidth, backgroundColor: colors.chartBackground }]}>
       <ScrollView
         ref={scrollViewRef}
         style={{ height: visibleHeight }}

@@ -251,7 +251,7 @@ export function PitchXAxis({ startTime, endTime, width }: PitchXAxisProps) {
   const labels = []
   for (let t = Math.ceil(startTime); t <= endTime; t++) labels.push(t)
   return (
-    <View style={[styles.xAxisContainer, { width, backgroundColor: colors.background, borderTopColor: colors.border }]}>
+    <View style={[styles.xAxisContainer, { width, backgroundColor: colors.chartBackground, borderTopColor: colors.border }]}>
       {labels.map(t => (
         <Text
           key={t}
