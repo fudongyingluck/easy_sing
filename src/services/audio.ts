@@ -45,6 +45,7 @@ export class AudioService {
     this.isRecording = true
     this.isPaused = false
 
+    NativeModules.AudioSessionModule?.resetForPlayback?.()
     await nativePitchRecorder.startDetection()
     await nativePitchRecorder.startRecording()
 
@@ -87,6 +88,7 @@ export class AudioService {
     const audioPath = await this.stopAll()
     this.isRecording = false
     this.isPaused = false
+    NativeModules.AudioSessionModule?.deactivate?.()
 
     const duration = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
 
@@ -107,10 +109,10 @@ export class AudioService {
     if (freq < 60 || freq > 1400) return
 
     this.pitchWindow.push(freq)
-    if (this.pitchWindow.length > 9) this.pitchWindow.shift()
+    if (this.pitchWindow.length > 3) this.pitchWindow.shift()
     const sorted = [...this.pitchWindow].sort((a, b) => a - b)
     const median = sorted[Math.floor(sorted.length / 2)]
-    const corrected = (freq > median * 1.25 || freq < median / 1.25) ? median : freq
+    const corrected = (freq > median * 1.5 || freq < median / 1.5) ? median : freq
 
     const midi = Math.round(12 * Math.log2(corrected / 440) + 69)
     const note = midiToNoteName(midi)
@@ -141,7 +143,7 @@ export class AudioService {
     return filename ? `${dir}/${filename}` : ''
   }
 
-  async playAudio(filePath: string, onProgress?: (time: number) => void): Promise<void> {
+  async playAudio(filePath: string, onProgress?: (time: number) => void, startTime?: number): Promise<void> {
     this.stopPlayback()
     NativeModules.AudioSessionModule?.resetForPlayback?.()
 
@@ -162,6 +164,8 @@ export class AudioService {
         this.playbackSound = sound
         this.playbackResolve = resolve
 
+        if (startTime && startTime > 0) sound.setCurrentTime(startTime)
+
         if (onProgress) {
           this.playbackTimer = setInterval(() => {
             sound.getCurrentTime((seconds: number) => onProgress(seconds))
@@ -169,9 +173,10 @@ export class AudioService {
         }
 
         sound.play(() => {
-          // 播放结束（正常结束或被 stop 打断）统一 resolve
-          sound.release()
+          // 只有 sound 还是当前 active 才 release（防止 stopPlayback 已释放后双重释放）
+          if (this.playbackSound === sound) sound.release()
           this._clearPlayback()
+          NativeModules.AudioSessionModule?.deactivate?.()
           resolve()
         })
       })
@@ -180,11 +185,14 @@ export class AudioService {
 
   pausePlayback(): void {
     this.playbackSound?.pause()
+    // 不调 deactivate：deactivate 会触发 iOS 音频中断，导致 react-native-sound 完成回调异常触发
+    // deactivate 只在完全停止（stopPlayback）时执行
   }
 
   resumePlayback(onProgress?: (time: number) => void): void {
     if (!this.playbackSound) return
     NativeModules.AudioSessionModule?.resetForPlayback?.()
+    if (this.playbackTimer) { clearInterval(this.playbackTimer); this.playbackTimer = null }
     if (onProgress) {
       this.playbackTimer = setInterval(() => {
         this.playbackSound?.getCurrentTime((seconds: number) => onProgress(seconds))
@@ -201,12 +209,17 @@ export class AudioService {
     if (this.playbackSound) {
       this.playbackSound.stop()
       this.playbackSound.release()
+      NativeModules.AudioSessionModule?.deactivate?.()
     }
     this._clearPlayback()
   }
 
   seekTo(time: number): void {
     this.playbackSound?.setCurrentTime(time)
+  }
+
+  hasPlayback(): boolean {
+    return this.playbackSound !== null
   }
 
   private _clearPlayback(): void {

@@ -19,4 +19,9 @@ class AudioSessionModule: NSObject {
     try? session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .mixWithOthers])
     try? session.setActive(true)
   }
+
+  // 录音结束后释放 session，让其他 app（如 B 站）恢复音频
+  @objc func deactivate() {
+    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+  }
 }

@@ -11,10 +11,18 @@
 - [x] 音符名称显示方式：拆分为左 Y 轴和右 Y 轴两个独立配置，PitchChart 已接入（英文带八度、唱名/数字不带八度）
 - [x] Y 轴双侧显示：左右两侧都显示 Y 轴标注，且左右可以独立配置显示方式（如左侧英文、右侧唱名）
 
+## 待测试
+
+- [ ] 录音后放弃，验证音频文件是否被正确删除（storage.ts `deleteRecordingFiles` 只删了 AsyncStorage key，未调用文件系统删除音频文件）
+
 ## 音频问题
 
 - [x] 钢琴点击不出声音
   - 问题描述：在练习页面点击虚拟钢琴键盘，没有声音播放
+
+- [ ] 录制时长与保存时长不一致，末尾播放无声音
+  - 现象：录制显示 12s，保存后变成 16s，最后几秒播放无声音
+  - 可能原因：stopRecording 时 AVAudioFile 还有未写入的缓冲帧，或计时逻辑（JS 侧）与实际 WAV 写入时长不同步
 
 ## 音高检测
 
@@ -53,15 +61,40 @@
 - [ ] 音量过低停止检测：Toggle 已有，但录音逻辑中没有低音量检测和自动停止实现
 - [ ] 音高检测频率接入：UI 可选 50/100/200/400 Hz，但检测逻辑中 bufferSize 仍使用固定值
 
+### 界面设计
+- [ ] 历史记录播放页面：音高区域和横轴相距过远，需要重新设计布局
+
 ### 音频
 - [ ] 钢琴音频延音很长，尾音听起来不自然（可考虑淡出或限制最大播放时长）
 
 ### 音高曲线
+
+- [ ] 录音时红线跳跃性移动，未实时跟随当前时间（`currentTime` 由 JS 计时器每秒 +1，与音频实际进度不同步）
+- [x] 播放历史录音时横轴突然跳到末尾（`now` 误用了 `dataLatestTime`，改为 seekable+playing 时只跟 `currentTime`）
 - [ ] 音高检测区域增加缩放功能（双指捏合缩放横轴时间范围 / 纵轴音高范围）
-- [ ] 时间游标（红色竖线）
-  - 需求：初始在左，录音中平滑跟随进度，暂停后可独立拖动（点中游标线拖动，不影响画布平移）
-  - 难点：游标拖拽与画布平移共用同一个 PanResponder，需要按触摸起点是否命中游标线分叉处理；录音计时器需提高到 100ms 以让游标平滑移动
-  - 遗留问题：游标命中区过大时会误拦截画布平移手势；maxOffset 应基于 latestTime（含音高数据时间戳）而非 currentTime，否则无法滑到 t=0
+
+- [x] **PitchChart 组件合并 + 红线 + Seek**（`PitchChart` 与 `RecordingPitchChart` 统一）
+
+  **组件层**
+  - [x] 合并 `PitchChart` 和 `RecordingPitchChart`，统一保留 `PitchChart`
+  - [x] 新增 `seekable` prop
+  - [x] 新增 `onSeekChange(time: number)` prop
+  - [x] `PitchCanvas` 新增 `currentTimeLine?: number` prop，画红色竖线
+  - [x] 删除 `RecordingPitchChart.tsx`
+
+  **PracticeScreen（录音暂停回看 + 试听）**
+  - [x] `PitchChart` 改传 `seekable={isPaused}`、`currentTime`、`onSeekChange`
+  - [x] 暂停态按钮改为：`[放弃]` `[播放 ▶]` `[继续录音 ⏺]` `[保存]`
+  - [x] 「播放 ▶」从 `seekTime` 开始播放；播放中变为 `[停止 ⏹]`；试听后隐藏「继续录音」
+  - [x] `saveAndStopRecording` / `discardRecording` 感知 `previewResult`，避免重复 stopRecording
+
+  **RecordingsScreen（历史录音 seek）**
+  - [x] `RecordingPitchChart` → `PitchChart`（`seekable`、`currentTime`）
+  - [x] `onSeekChange` 接入 `audioService.seekTo(time)`
+
+  **测试**
+  - [x] 安装测试依赖：`npm install --save-dev @testing-library/react-native react-test-renderer@19.1.1`
+  - [x] 跑 `__tests__/components/PitchChart.test.tsx` 全部 case 通过（23 个）
 
 ## 界面设计
 
@@ -89,14 +122,8 @@
     - 配置 iOS 的 App 图标（Assets.xcassets）
     - 配置 Android 的 App 图标
 
-- [ ] 历史记录播放没有声音
-- [ ] 播放历史记录时显示音高
-- [ ] 暂停后支持试听录音（在保存/放弃前可以先试听刚录的内容）
-  - 问题描述：在记录页面播放历史录音时，只显示播放进度条，没有显示音高曲线
-  - 需要完成的工作：
-    - 从保存的 pitchData 中读取音高数据
-    - 在播放录音时显示音高曲线（可以复用 PitchChart 组件）
-    - 音高曲线和播放进度同步显示
+- [x] 播放历史记录时显示音高
+- [x] 暂停后支持试听录音（在保存/放弃前可以先试听刚录的内容）→ 见「PitchChart 组件合并」
 
 - [x] 钢琴下方空白过多，开始按钮压到了音高检测区域的横坐标
   - 问题描述：虚拟钢琴区域下方有多余空白，"开始"等控制按钮位置偏低，遮挡了音高检测图表的横坐标轴

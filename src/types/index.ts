@@ -18,7 +18,7 @@ export interface Recording {
   id: string
   name: string
   audioFilePath: string
-  pitchDataPath: string
+  pitchDataKey: string
   duration: number    // 秒
   fileSize: number    // 字节
   createTime: string  // ISO日期字符串

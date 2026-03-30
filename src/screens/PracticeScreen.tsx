@@ -25,6 +25,9 @@ export function PracticeScreen({ navigation }: any) {
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [pitchData, setPitchData] = useState<any[]>([])
   const [recordingTime, setRecordingTime] = useState(0)
+  const [seekTime, setSeekTime] = useState(0)
+  const [previewResult, setPreviewResult] = useState<{ audioPath: string; duration: number; pitchData: any } | null>(null)
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false)
   const [pianoExpanded, setPianoExpanded] = useState(true)
   const [chartAreaHeight, setChartAreaHeight] = useState(SCREEN_HEIGHT * 5 / 12)
 
@@ -137,6 +140,29 @@ export function PracticeScreen({ navigation }: any) {
     }
   }
 
+  // 试听（暂停后播放已录内容）
+  const startPreview = async () => {
+    try {
+      audioService.setOnPitchDataUpdate(null)
+      audioService.setOnMaxDurationReached(null)
+      const result = await audioService.stopRecording()
+      setPreviewResult(result)
+      setIsPreviewPlaying(true)
+      await audioService.playAudio(result.audioPath, (time) => setRecordingTime(time), seekTime)
+      setRecordingTime(result.duration)
+    } catch (error) {
+      console.error('Failed to start preview:', error)
+    } finally {
+      setIsPreviewPlaying(false)
+    }
+  }
+
+  const stopPreview = () => {
+    audioService.stopPlayback()
+    setIsPreviewPlaying(false)
+    setRecordingTime(previewResult?.duration ?? 0)
+  }
+
   // 继续录音
   const resumeRecording = async () => {
     try {
@@ -161,11 +187,17 @@ export function PracticeScreen({ navigation }: any) {
         recordingTimerRef.current = null
       }
 
-      // 清除音高数据回调
-      audioService.setOnPitchDataUpdate(null)
-      audioService.setOnMaxDurationReached(null)
+      audioService.stopPlayback()
 
-      const result = await audioService.stopRecording()
+      // 若已试听（录音已在 startPreview 中停止），直接用缓存结果；否则正常停止
+      let result: { audioPath: string; duration: number; pitchData: any }
+      if (previewResult) {
+        result = previewResult
+      } else {
+        audioService.setOnPitchDataUpdate(null)
+        audioService.setOnMaxDurationReached(null)
+        result = await audioService.stopRecording()
+      }
       setRecordingState('idle')
       setRecordingDuration(result.duration)
 
@@ -181,7 +213,7 @@ export function PracticeScreen({ navigation }: any) {
           second: '2-digit'
         }).replace(/\//g, '-'),
         audioFilePath: result.audioPath,
-        pitchDataPath: await savePitchData(recordingId!, result.pitchData),
+        pitchDataKey: await savePitchData(recordingId!, result.pitchData),
         duration: result.duration,
         fileSize: 0, // TODO: 获取文件大小
         createTime: new Date().toISOString()
@@ -196,6 +228,9 @@ export function PracticeScreen({ navigation }: any) {
       setRecordingId(null)
       setRecordingTime(0)
       setPitchData([])
+      setPreviewResult(null)
+      setIsPreviewPlaying(false)
+      setSeekTime(0)
 
     } catch (error) {
       console.error('Failed to save recording:', error)
@@ -210,18 +245,25 @@ export function PracticeScreen({ navigation }: any) {
         recordingTimerRef.current = null
       }
 
-      // 清除音高数据回调
-      audioService.setOnPitchDataUpdate(null)
-      audioService.setOnMaxDurationReached(null)
+      audioService.stopPlayback()
+
+      // 若已试听，录音已停止，无需再调 stopRecording
+      if (!previewResult) {
+        audioService.setOnPitchDataUpdate(null)
+        audioService.setOnMaxDurationReached(null)
 
       // 停止录音但不保存
-      await audioService.stopRecording()
+        await audioService.stopRecording()
+      }
 
       // 重置状态
       setRecordingState('idle')
       setRecordingId(null)
       setRecordingTime(0)
       setPitchData([])
+      setPreviewResult(null)
+      setIsPreviewPlaying(false)
+      setSeekTime(0)
 
     } catch (error) {
       console.error('Failed to discard recording:', error)
@@ -266,6 +308,8 @@ export function PracticeScreen({ navigation }: any) {
               height={chartAreaHeight}
               currentTime={recordingTime}
               paused={recordingState === 'paused'}
+              seekable={recordingState === 'paused'}
+              onSeekChange={(t) => setSeekTime(t)}
               leftDisplay={leftYAxisDisplay}
               rightDisplay={rightYAxisDisplay}
             />
@@ -297,19 +341,28 @@ export function PracticeScreen({ navigation }: any) {
             </TouchableOpacity>
           )}
 
-          {/* 状态3：已暂停（Paused）- 显示继续（未达时限）、保存、放弃 */}
+          {/* 状态3：已暂停（Paused）*/}
           {recordingState === 'paused' && (
             <View style={styles.pausedButtonsContainer}>
-              {!reachedDurationLimit && (
-                <TouchableOpacity style={[styles.controlButton, styles.pausedButton]} onPress={resumeRecording}>
-                  <Text style={styles.controlButtonText}>继续</Text>
+              <TouchableOpacity style={[styles.controlButton, styles.discardButton]} onPress={discardRecording}>
+                <Text style={styles.controlButtonText}>放弃</Text>
+              </TouchableOpacity>
+              {isPreviewPlaying ? (
+                <TouchableOpacity style={[styles.controlButton, styles.pausedButton]} onPress={stopPreview}>
+                  <Text style={styles.controlButtonText}>停止 ⏹</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={[styles.controlButton, styles.pausedButton]} onPress={startPreview}>
+                  <Text style={styles.controlButtonText}>播放 ▶</Text>
+                </TouchableOpacity>
+              )}
+              {!reachedDurationLimit && !previewResult && (
+                <TouchableOpacity style={[styles.controlButton, styles.resumeButton]} onPress={resumeRecording}>
+                  <Text style={styles.controlButtonText}>继续 ⏺</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity style={[styles.controlButton, styles.saveButton]} onPress={saveAndStopRecording}>
                 <Text style={styles.controlButtonText}>保存</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.controlButton, styles.discardButton]} onPress={discardRecording}>
-                <Text style={styles.controlButtonText}>放弃</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -439,6 +492,9 @@ const styles = StyleSheet.create({
   },
   pausedButton: {
     backgroundColor: '#007AFF'
+  },
+  resumeButton: {
+    backgroundColor: '#FF9500'
   },
   saveButton: {
     backgroundColor: '#34C759'

@@ -64,7 +64,12 @@ export async function loadRecordings(): Promise<Recording[]> {
   try {
     const data = await AsyncStorage.getItem(RECORDINGS_KEY)
     if (data) {
-      return JSON.parse(data)
+      const recordings = JSON.parse(data)
+      // 兼容旧字段名 pitchDataPath → pitchDataKey
+      return recordings.map((r: any) => ({
+        ...r,
+        pitchDataKey: r.pitchDataKey ?? r.pitchDataPath,
+      }))
     }
     return []
   } catch (error) {
@@ -112,8 +117,8 @@ export async function loadPitchData(filePath: string): Promise<PitchData | null>
 export async function deleteRecordingFiles(recording: Recording): Promise<void> {
   try {
     // 删除音高数据
-    if (recording.pitchDataPath) {
-      await AsyncStorage.removeItem(recording.pitchDataPath)
+    if (recording.pitchDataKey) {
+      await AsyncStorage.removeItem(recording.pitchDataKey)
     }
     // 注意：实际音频文件需要用文件系统 API 删除
   } catch (error) {
