@@ -1,30 +1,31 @@
 import React, { useEffect } from 'react'
 import { NavigationContainer } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import { StatusBar } from 'react-native'
 import Ionicons from 'react-native-vector-icons/Ionicons'
 import { PracticeScreen } from './screens/PracticeScreen'
 import { RecordingsScreen } from './screens/RecordingsScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { initStorage } from './services/storage'
+import { ThemeProvider, useTheme } from './context/ThemeContext'
 
 const Tab = createBottomTabNavigator()
 
-export default function App() {
-  useEffect(() => {
-    initStorage()
-  }, [])
+function AppNavigator() {
+  const { colors, isDark } = useTheme()
 
   return (
-    <NavigationContainer>
+    <>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       <Tab.Navigator
         screenOptions={{
           headerShown: false,
           tabBarActiveTintColor: '#FF6B6B',
-          tabBarInactiveTintColor: '#999',
+          tabBarInactiveTintColor: colors.textSecondary,
           tabBarStyle: {
             borderTopWidth: 1,
-            borderTopColor: '#eee',
-            backgroundColor: '#fff',
+            borderTopColor: colors.border,
+            backgroundColor: colors.background,
             paddingTop: 4
           }
         }}
@@ -60,6 +61,20 @@ export default function App() {
           }}
         />
       </Tab.Navigator>
-    </NavigationContainer>
+    </>
+  )
+}
+
+export default function App() {
+  useEffect(() => {
+    initStorage()
+  }, [])
+
+  return (
+    <ThemeProvider>
+      <NavigationContainer>
+        <AppNavigator />
+      </NavigationContainer>
+    </ThemeProvider>
   )
 }

@@ -54,6 +54,29 @@
 - [x] 音高曲线的细腻程度还需要调整
 - [x] 现在音高曲线更偏向连接，改成更偏向打断
 
+## 夜间模式
+
+- [x] **第一步：数据层** — `UserSettings` 新增 `themeMode: 'light' | 'dark' | 'system'` 字段（`src/types/index.ts` + `src/services/storage.ts` 默认值）
+- [x] **第二步：ThemeContext** — 新建 `src/context/ThemeContext.tsx`，读取 `themeMode` + `useColorScheme()` 决定当前主题，提供 `useTheme()` hook 返回颜色 token；在 `App.tsx` 根层用 `ThemeProvider` 包裹整个应用
+- [x] **第三步：颜色 token** — 在 `ThemeContext.tsx` 中定义 light / dark 两套颜色常量：
+  - `background`（页面背景）
+  - `surface`（卡片/列表项背景）
+  - `border`（分割线）
+  - `text`（主文字）
+  - `textSecondary`（次要文字）
+  - `chartBackground`（音高图背景）
+  - `chartGrid`（网格线颜色）
+  - `chartLine`（音高曲线颜色）
+  - `chartLabel`（Y 轴标注文字颜色）
+- [x] **第四步：接入各页面/组件**
+  - [x] `App.tsx` — Tab 导航栏背景色、Tab 字体色；`StatusBar` 随主题切换
+  - [x] `PracticeScreen.tsx` — 页面背景、标题栏、钢琴区域
+  - [x] `RecordingsScreen.tsx` — 页面背景、列表项
+  - [x] `SettingsScreen.tsx` — 页面背景、分组列表、行背景、弹出选择器
+  - [x] `PitchCanvas.tsx` — 图表背景、网格线、Y 轴标注文字、X 轴
+  - `Piano.tsx` — 键盘颜色为乐器固有外观，不随主题变化，保持不变
+- [x] **第五步：设置页 UI** — 新增「外观」分组，三选一（白天 / 夜晚 / 跟随系统），保存到 `UserSettings`
+
 ## 二期功能
 
 ### 设置页

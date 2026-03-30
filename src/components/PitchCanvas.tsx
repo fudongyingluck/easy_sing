@@ -3,6 +3,7 @@ import { View, StyleSheet, Text } from 'react-native'
 import Svg, { Line, Text as SvgText, Path, Circle, Rect, Defs, LinearGradient, Stop, ClipPath, G } from 'react-native-svg'
 import { PitchDataPoint } from '../types'
 import { noteNameToMidi, midiToNoteName } from '../utils/noteUtils'
+import { useTheme } from '../context/ThemeContext'
 
 export const X_AXIS_HEIGHT = 30
 
@@ -66,6 +67,7 @@ export const PitchCanvas = memo(function PitchCanvas({
   rightDisplay = 'english',
   currentTimeLine,
 }: PitchCanvasProps) {
+  const { colors } = useTheme()
   const duration = endTime - startTime
   const midiRange = maxMidi - minMidi
   const chartWidth = width - PADDING.left - PADDING.right
@@ -176,25 +178,25 @@ export const PitchCanvas = memo(function PitchCanvas({
             <Rect x={PADDING.left} y={0} width={chartWidth} height={svgHeight} />
           </ClipPath>
         </Defs>
-        <Rect x={0} y={PADDING.top} width={width} height={svgHeight - PADDING.top - PADDING.bottom} fill="#f5f5f5" />
+        <Rect x={0} y={PADDING.top} width={width} height={svgHeight - PADDING.top - PADDING.bottom} fill={colors.chartBackground} />
         {xAxisLabels.map(t => (
           <Line key={`vg-${t}`}
             x1={timeToX(t)} y1={PADDING.top}
             x2={timeToX(t)} y2={svgHeight - PADDING.bottom}
-            stroke="#ddd" strokeWidth={1} />
+            stroke={colors.chartGrid} strokeWidth={1} />
         ))}
 
         {allMidiLines.map(midi => (
           <Line key={`hg-${midi}`}
             x1={PADDING.left} y1={getMidiY(midi)}
             x2={width - PADDING.right} y2={getMidiY(midi)}
-            stroke="#ddd" strokeWidth={1} />
+            stroke={colors.chartGrid} strokeWidth={1} />
         ))}
 
         {yAxisLabels.map(label => (
           <SvgText key={`yl-${label.note}`}
             x={PADDING.left + 4} y={getMidiY(label.midi) + 4}
-            fontSize={10} fill="#666" textAnchor="start">
+            fontSize={10} fill={colors.chartLabel} textAnchor="start">
             {formatNoteLabel(label.note, leftDisplay)}
           </SvgText>
         ))}
@@ -202,7 +204,7 @@ export const PitchCanvas = memo(function PitchCanvas({
         {yAxisLabels.map(label => (
           <SvgText key={`yr-${label.note}`}
             x={width - PADDING.right - 4} y={getMidiY(label.midi) + 4}
-            fontSize={10} fill="#666" textAnchor="end">
+            fontSize={10} fill={colors.chartLabel} textAnchor="end">
             {formatNoteLabel(label.note, rightDisplay)}
           </SvgText>
         ))}
@@ -241,6 +243,7 @@ interface PitchXAxisProps {
 }
 
 export function PitchXAxis({ startTime, endTime, width }: PitchXAxisProps) {
+  const { colors } = useTheme()
   const duration = endTime - startTime
   const chartWidth = width - PADDING.left - PADDING.right
   const timeToX = (t: number) => PADDING.left + ((t - startTime) / duration) * chartWidth
@@ -248,7 +251,7 @@ export function PitchXAxis({ startTime, endTime, width }: PitchXAxisProps) {
   const labels = []
   for (let t = Math.ceil(startTime); t <= endTime; t++) labels.push(t)
   return (
-    <View style={[styles.xAxisContainer, { width }]}>
+    <View style={[styles.xAxisContainer, { width, backgroundColor: colors.background, borderTopColor: colors.border }]}>
       {labels.map(t => (
         <Text
           key={t}
@@ -258,7 +261,7 @@ export function PitchXAxis({ startTime, endTime, width }: PitchXAxisProps) {
             top: 6,
             width: 20,
             fontSize: 10,
-            color: '#666',
+            color: colors.textSecondary,
             textAlign: 'center',
           }}
         >

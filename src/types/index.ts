@@ -50,6 +50,7 @@ export interface UserSettings {
   leftYAxisDisplay: 'english' | 'solfege' | 'number'
   rightYAxisDisplay: 'english' | 'solfege' | 'number'
   showBothYAxes: boolean
+  themeMode: 'light' | 'dark' | 'system'
 }
 
 // 应用状态

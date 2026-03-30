@@ -213,7 +213,7 @@ RCT_EXPORT_METHOD(startRecording:(RCTPromiseResolveBlock)resolve
     return;
   }
 
-  NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
+  NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
   NSString *dir = [cacheDir stringByAppendingPathComponent:@"PitchPerfect"];
   [[NSFileManager defaultManager] createDirectoryAtPath:dir
                               withIntermediateDirectories:YES
@@ -269,13 +269,27 @@ RCT_EXPORT_METHOD(stopRecording:(RCTPromiseResolveBlock)resolve
 
 RCT_EXPORT_METHOD(getRecordingsDirectory:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
-  NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
-  NSString *dir = [cacheDir stringByAppendingPathComponent:@"PitchPerfect"];
+  NSString *docDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+  NSString *dir = [docDir stringByAppendingPathComponent:@"PitchPerfect"];
   [[NSFileManager defaultManager] createDirectoryAtPath:dir
                               withIntermediateDirectories:YES
                                                attributes:nil
                                                     error:nil];
   resolve(dir);
+}
+
+// 按文件名查找录音文件：先找 Documents，再找 Caches（兼容旧录音）
+RCT_EXPORT_METHOD(resolveRecordingPath:(NSString *)filename
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  NSFileManager *fm = [NSFileManager defaultManager];
+  NSString *docDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+  NSString *docsPath = [[docDir stringByAppendingPathComponent:@"PitchPerfect"] stringByAppendingPathComponent:filename];
+  if ([fm fileExistsAtPath:docsPath]) { resolve(docsPath); return; }
+  NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
+  NSString *cachePath = [[cacheDir stringByAppendingPathComponent:@"PitchPerfect"] stringByAppendingPathComponent:filename];
+  if ([fm fileExistsAtPath:cachePath]) { resolve(cachePath); return; }
+  resolve(docsPath); // 都不存在，返回 Documents 路径（播放时会报错）
 }
 
 // ---------------------------------------------------------------------------

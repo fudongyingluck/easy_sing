@@ -10,6 +10,7 @@ import { loadUserSettings, saveUserSettings } from '../services/storage'
 import { noteNameToMidi, noteNameToFreq } from '../utils/noteUtils'
 import { NotePicker } from '../components/NotePicker'
 import { UserSettings } from '../types'
+import { useTheme } from '../context/ThemeContext'
 
 // ─── SettingRow ───────────────────────────────────────────────────────────────
 
@@ -24,14 +25,15 @@ interface SettingRowProps {
 }
 
 function SettingRow({ icon, iconColor, title, value, onPress, rightNode, isLast }: SettingRowProps) {
+  const { colors } = useTheme()
   const content = (
-    <View style={[rs.row, !isLast && rs.borderBottom]}>
+    <View style={[rs.row, { backgroundColor: colors.surface }, !isLast && rs.borderBottom, !isLast && { borderBottomColor: colors.border }]}>
       <View style={[rs.iconBox, { backgroundColor: iconColor }]}>
         <Ionicons name={icon} size={17} color="#fff" />
       </View>
-      <Text style={rs.title}>{title}</Text>
+      <Text style={[rs.title, { color: colors.text }]}>{title}</Text>
       <View style={rs.right}>
-        {value != null && <Text style={rs.value}>{value}</Text>}
+        {value != null && <Text style={[rs.value, { color: colors.textSecondary }]}>{value}</Text>}
         {rightNode}
         {onPress && !rightNode && (
           <Ionicons name="chevron-forward" size={16} color="#C7C7CC" style={{ marginLeft: 2 }} />
@@ -85,10 +87,11 @@ const rs = StyleSheet.create({
 // ─── Section ──────────────────────────────────────────────────────────────────
 
 function Section({ title, children }: { title?: string; children: React.ReactNode }) {
+  const { colors } = useTheme()
   return (
     <View style={ss.wrapper}>
-      {title && <Text style={ss.header}>{title}</Text>}
-      <View style={ss.card}>{children}</View>
+      {title && <Text style={[ss.header, { color: colors.textSecondary }]}>{title}</Text>}
+      <View style={[ss.card, { borderColor: colors.border }]}>{children}</View>
     </View>
   )
 }
@@ -129,20 +132,21 @@ interface OptionPickerProps {
 }
 
 function OptionPicker({ visible, title, options, selected, onSelect, onClose }: OptionPickerProps) {
+  const { colors } = useTheme()
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity style={ops.overlay} onPress={onClose} activeOpacity={1} />
-      <View style={ops.sheet}>
+      <View style={[ops.sheet, { backgroundColor: colors.surface }]}>
         <View style={ops.handle} />
-        <Text style={ops.sheetTitle}>{title}</Text>
-        <View style={ops.optionCard}>
+        <Text style={[ops.sheetTitle, { color: colors.textSecondary }]}>{title}</Text>
+        <View style={[ops.optionCard, { borderColor: colors.border }]}>
           {options.map((opt, i) => (
             <TouchableOpacity
               key={String(opt.value)}
-              style={[ops.option, i < options.length - 1 && rs.borderBottom]}
+              style={[ops.option, { backgroundColor: colors.background }, i < options.length - 1 && rs.borderBottom, i < options.length - 1 && { borderBottomColor: colors.border }]}
               onPress={() => { onSelect(opt.value); onClose() }}
             >
-              <Text style={[ops.optLabel, opt.value === selected && ops.optSelected]}>
+              <Text style={[ops.optLabel, { color: colors.text }, opt.value === selected && ops.optSelected]}>
                 {opt.label}
               </Text>
               {opt.value === selected && (
@@ -151,8 +155,8 @@ function OptionPicker({ visible, title, options, selected, onSelect, onClose }: 
             </TouchableOpacity>
           ))}
         </View>
-        <TouchableOpacity style={ops.cancelCard} onPress={onClose}>
-          <Text style={ops.cancelText}>取消</Text>
+        <TouchableOpacity style={[ops.cancelCard, { backgroundColor: colors.background }]} onPress={onClose}>
+          <Text style={[ops.cancelText, { color: colors.text }]}>取消</Text>
         </TouchableOpacity>
       </View>
     </Modal>
@@ -233,6 +237,7 @@ interface ModeSubPageProps {
 }
 
 function ModeSubPage({ settings, onBack, onUpdate }: ModeSubPageProps) {
+  const { colors } = useTheme()
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
   const [newStart, setNewStart] = useState('C3')
@@ -293,13 +298,13 @@ function ModeSubPage({ settings, onBack, onUpdate }: ModeSubPageProps) {
   }
 
   return (
-    <SafeAreaView style={msp.container}>
-      <View style={msp.header}>
+    <SafeAreaView style={[msp.container, { backgroundColor: colors.background }]}>
+      <View style={[msp.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={onBack} style={msp.backBtn}>
           <Ionicons name="chevron-back" size={22} color="#FF6B6B" />
           <Text style={msp.backText}>设置</Text>
         </TouchableOpacity>
-        <Text style={msp.headerTitle}>音域模式</Text>
+        <Text style={[msp.headerTitle, { color: colors.text }]}>音域模式</Text>
         <TouchableOpacity
           style={msp.addBtn}
           onPress={() => {
@@ -320,14 +325,14 @@ function ModeSubPage({ settings, onBack, onUpdate }: ModeSubPageProps) {
           {PRESET_MODES.map((mode, i) => (
             <TouchableOpacity
               key={mode.id}
-              style={[msp.modeRow, i < PRESET_MODES.length - 1 && rs.borderBottom]}
+              style={[msp.modeRow, { backgroundColor: colors.surface }, i < PRESET_MODES.length - 1 && rs.borderBottom, i < PRESET_MODES.length - 1 && { borderBottomColor: colors.border }]}
               onPress={() => handleSelect(mode.id)}
               activeOpacity={0.6}
             >
               <Ionicons name={mode.icon} size={22} color="#FF6B6B" style={{ marginRight: 12 }} />
               <View style={{ flex: 1 }}>
-                <Text style={msp.modeName}>{mode.name}</Text>
-                <Text style={msp.modeRange}>{mode.startNote} ~ {mode.endNote}</Text>
+                <Text style={[msp.modeName, { color: colors.text }]}>{mode.name}</Text>
+                <Text style={[msp.modeRange, { color: colors.textSecondary }]}>{mode.startNote} ~ {mode.endNote}</Text>
               </View>
               {mode.id === settings.currentModeId && (
                 <Ionicons name="checkmark-circle" size={22} color="#FF6B6B" />
@@ -343,7 +348,7 @@ function ModeSubPage({ settings, onBack, onUpdate }: ModeSubPageProps) {
               {settings.customModes.map((mode, i) => (
                 <View
                   key={mode.id}
-                  style={[msp.modeRow, i < settings.customModes.length - 1 && rs.borderBottom]}
+                  style={[msp.modeRow, { backgroundColor: colors.surface }, i < settings.customModes.length - 1 && rs.borderBottom, i < settings.customModes.length - 1 && { borderBottomColor: colors.border }]}
                 >
                   <TouchableOpacity
                     style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
@@ -352,8 +357,8 @@ function ModeSubPage({ settings, onBack, onUpdate }: ModeSubPageProps) {
                   >
                     <Ionicons name="person-outline" size={22} color="#FF6B6B" style={{ marginRight: 12 }} />
                     <View style={{ flex: 1 }}>
-                      <Text style={msp.modeName}>{mode.name}</Text>
-                      <Text style={msp.modeRange}>{mode.startNote} ~ {mode.endNote}</Text>
+                      <Text style={[msp.modeName, { color: colors.text }]}>{mode.name}</Text>
+                      <Text style={[msp.modeRange, { color: colors.textSecondary }]}>{mode.startNote} ~ {mode.endNote}</Text>
                     </View>
                     {mode.id === settings.currentModeId && (
                       <Ionicons name="checkmark-circle" size={22} color="#FF6B6B" />
@@ -372,32 +377,32 @@ function ModeSubPage({ settings, onBack, onUpdate }: ModeSubPageProps) {
       {/* 添加模式弹窗 */}
       {showAdd && (
         <View style={msp.overlay}>
-          <View style={msp.modalCard}>
-            <View style={msp.modalHeader}>
+          <View style={[msp.modalCard, { backgroundColor: colors.surface }]}>
+            <View style={[msp.modalHeader, { borderBottomColor: colors.border }]}>
               <TouchableOpacity onPress={() => setShowAdd(false)}>
-                <Text style={{ color: '#666', fontSize: 16 }}>取消</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 16 }}>取消</Text>
               </TouchableOpacity>
-              <Text style={msp.modalTitle}>添加自定义模式</Text>
+              <Text style={[msp.modalTitle, { color: colors.text }]}>添加自定义模式</Text>
               <TouchableOpacity onPress={handleAdd}>
                 <Text style={{ color: '#007AFF', fontSize: 16, fontWeight: '600' }}>保存</Text>
               </TouchableOpacity>
             </View>
             <View style={{ padding: 16 }}>
-              <Text style={msp.label}>模式名称</Text>
+              <Text style={[msp.label, { color: colors.text }]}>模式名称</Text>
               <TextInput
-                style={msp.input}
+                style={[msp.input, { borderColor: colors.border, color: colors.text }]}
                 value={newName}
                 onChangeText={setNewName}
                 placeholder="例如：我的音域"
                 autoFocus
               />
-              <Text style={msp.label}>最低音</Text>
-              <TouchableOpacity style={msp.notePicker} onPress={() => setShowStartPicker(true)}>
-                <Text style={msp.notePickerText}>{newStart}</Text>
+              <Text style={[msp.label, { color: colors.text }]}>最低音</Text>
+              <TouchableOpacity style={[msp.notePicker, { borderColor: colors.border }]} onPress={() => setShowStartPicker(true)}>
+                <Text style={[msp.notePickerText, { color: colors.text }]}>{newStart}</Text>
               </TouchableOpacity>
-              <Text style={msp.label}>最高音</Text>
-              <TouchableOpacity style={msp.notePicker} onPress={() => setShowEndPicker(true)}>
-                <Text style={msp.notePickerText}>{newEnd}</Text>
+              <Text style={[msp.label, { color: colors.text }]}>最高音</Text>
+              <TouchableOpacity style={[msp.notePicker, { borderColor: colors.border }]} onPress={() => setShowEndPicker(true)}>
+                <Text style={[msp.notePickerText, { color: colors.text }]}>{newEnd}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -492,6 +497,7 @@ const msp = StyleSheet.create({
 // ─── SettingsScreen ───────────────────────────────────────────────────────────
 
 export function SettingsScreen() {
+  const { colors, themeMode, setThemeMode } = useTheme()
   const [settings, setSettings] = useState<UserSettings | null>(null)
   const [page, setPage] = useState<'main' | 'modes'>('main')
   const [activePicker, setActivePicker] = useState<string | null>(null)
@@ -536,10 +542,10 @@ export function SettingsScreen() {
     : `${settings.recordingDurationLimit} 秒`
 
   return (
-    <SafeAreaView style={main.container}>
-      <View style={main.header}>
+    <SafeAreaView style={[main.container, { backgroundColor: colors.background }]}>
+      <View style={[main.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <Ionicons name="settings-outline" size={20} color="#FF6B6B" style={{ marginRight: 8 }} />
-        <Text style={main.headerTitle}>设置</Text>
+        <Text style={[main.headerTitle, { color: colors.text }]}>设置</Text>
       </View>
 
       <ScrollView contentContainerStyle={main.scroll}>
@@ -605,6 +611,16 @@ export function SettingsScreen() {
                 thumbColor="#fff"
               />
             }
+            isLast
+          />
+        </Section>
+
+        <Section title="外观">
+          <SettingRow
+            icon="moon-outline" iconColor="#5856D6"
+            title="主题"
+            value={themeMode === 'light' ? '白天' : themeMode === 'dark' ? '夜晚' : '跟随系统'}
+            onPress={() => setActivePicker('themeMode')}
             isLast
           />
         </Section>
@@ -676,6 +692,22 @@ export function SettingsScreen() {
         options={noteDisplayOptions}
         selected={settings.rightYAxisDisplay}
         onSelect={v => save({ ...settings, rightYAxisDisplay: v })}
+        onClose={() => setActivePicker(null)}
+      />
+
+      <OptionPicker
+        visible={activePicker === 'themeMode'}
+        title="主题"
+        options={[
+          { label: '白天', value: 'light' },
+          { label: '夜晚', value: 'dark' },
+          { label: '跟随系统', value: 'system' },
+        ]}
+        selected={themeMode}
+        onSelect={v => {
+          setThemeMode(v)
+          save({ ...settings, themeMode: v })
+        }}
         onClose={() => setActivePicker(null)}
       />
     </SafeAreaView>

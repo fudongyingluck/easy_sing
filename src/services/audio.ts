@@ -147,10 +147,11 @@ export class AudioService {
     this.stopPlayback()
     NativeModules.AudioSessionModule?.resetForPlayback?.()
 
-    // 用当前目录重建路径，修复重装 App 后 UUID 变化导致路径失效的问题
+    // 按文件名查找：Documents 优先，兼容旧 Caches 路径，兼容重装后 UUID 变化
     const filename = filePath.split('/').pop() ?? filePath
-    const dir = await nativePitchRecorder.getRecordingsDirectory()
-    const resolvedPath = filename ? `${dir}/${filename}` : filePath
+    const resolvedPath = filename ? await nativePitchRecorder.resolveRecordingPath(filename) : filePath
+    console.log('[playAudio] stored:', filePath)
+    console.log('[playAudio] resolved:', resolvedPath)
 
     // 懒加载，避免模块初始化时修改 AVAudioSession 影响录音
     // eslint-disable-next-line @typescript-eslint/no-require-imports

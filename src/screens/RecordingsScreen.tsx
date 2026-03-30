@@ -7,9 +7,11 @@ import { loadRecordings, saveRecordings, deleteRecordingFiles, loadPitchData } f
 import { audioService } from '../services/audio'
 import { PitchChart } from '../components/PitchChart'
 import { freqToMidi, midiToNoteName } from '../utils/noteUtils'
+import { useTheme } from '../context/ThemeContext'
 
 export function RecordingsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets()
+  const { colors } = useTheme()
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -87,9 +89,10 @@ export function RecordingsScreen({ navigation }: any) {
     setIsPlaying(true)
     try {
       await audioService.playAudio(recording.audioFilePath, (time) => setCurrentTime(time))
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to play recording:', error)
-      Alert.alert('播放失败', '无法播放此录音')
+      const isNotFound = error?.code?.includes('2003334207') || error?.code?.includes('ENOENT')
+      Alert.alert('播放失败', isNotFound ? '录音文件已丢失，无法播放' : String(error?.message ?? error))
     } finally {
       setIsPlaying(false)
       setCurrentTime(0)
@@ -190,14 +193,14 @@ export function RecordingsScreen({ navigation }: any) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         {isSelectionMode ? (
           <>
             <TouchableOpacity onPress={exitSelectionMode}>
               <Text style={styles.headerAction}>取消</Text>
             </TouchableOpacity>
-            <Text style={styles.title}>已选 {selectedIds.size} 个</Text>
+            <Text style={[styles.title, { color: colors.text }]}>已选 {selectedIds.size} 个</Text>
             <TouchableOpacity onPress={toggleSelectAll}>
               <Text style={styles.headerAction}>
                 {selectedIds.size === recordings.length ? '全不选' : '全选'}
@@ -209,7 +212,7 @@ export function RecordingsScreen({ navigation }: any) {
             <View style={{ width: 60 }} />
             <View style={styles.titleWithIcon}>
               <Ionicons name="folder-outline" size={22} color="#4ECDC4" style={styles.titleIcon} />
-              <Text style={styles.title}>我的录音</Text>
+              <Text style={[styles.title, { color: colors.text }]}>我的录音</Text>
             </View>
             {recordings.length > 0 ? (
               <TouchableOpacity onPress={() => setIsSelectionMode(true)}>
@@ -224,14 +227,14 @@ export function RecordingsScreen({ navigation }: any) {
 
       {recordings.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>暂无录音</Text>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>暂无录音</Text>
         </View>
       ) : (
         <ScrollView style={styles.list} showsVerticalScrollIndicator>
           {recordings.map((recording) => (
             <TouchableOpacity
               key={recording.id}
-              style={[styles.item, isSelectionMode && selectedIds.has(recording.id) && styles.itemSelected]}
+              style={[styles.item, { backgroundColor: colors.surface, borderBottomColor: colors.border }, isSelectionMode && selectedIds.has(recording.id) && styles.itemSelected]}
               onPress={() => onRecordingPress(recording)}
               activeOpacity={0.7}
             >
@@ -241,8 +244,8 @@ export function RecordingsScreen({ navigation }: any) {
                 </View>
               )}
               <View style={styles.itemInfo}>
-                <Text style={styles.itemName}>♪ {recording.name}</Text>
-                <Text style={styles.itemMeta}>
+                <Text style={[styles.itemName, { color: colors.text }]}>♪ {recording.name}</Text>
+                <Text style={[styles.itemMeta, { color: colors.textSecondary }]}>
                   时长: {formatDuration(recording.duration)}
                   {recording.fileSize > 0 && ` · ${formatFileSize(recording.fileSize)}`}
                 </Text>

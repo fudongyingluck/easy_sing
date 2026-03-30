@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, PanGestureHandler } from 'react-native'
 import { CONFIG } from '../config/constants'
 import { noteNameToMidi, midiToNoteName, noteNameToFreq } from '../utils/noteUtils'
+import { useTheme } from '../context/ThemeContext'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const SCROLL_BAR_HEIGHT = 6
@@ -15,6 +16,8 @@ interface PianoProps {
 }
 
 export function Piano({ startNote, endNote, disabled = false, onKeyPress }: PianoProps) {
+  const { isDark } = useTheme()
+  const whiteKeyColor = isDark ? '#D0D0D0' : '#fff'
   const [pressedKey, setPressedKey] = useState<string | null>(null)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [contentWidth, setContentWidth] = useState(0)
@@ -154,7 +157,7 @@ export function Piano({ startNote, endNote, disabled = false, onKeyPress }: Pian
                 key={key.note}
                 style={[
                   styles.whiteKey,
-                  { width: whiteKeyWidth },
+                  { width: whiteKeyWidth, backgroundColor: whiteKeyColor },
                   pressedKey === key.note && styles.whiteKeyPressed,
                   disabled && styles.disabledKey
                 ]}
@@ -202,7 +205,8 @@ export function Piano({ startNote, endNote, disabled = false, onKeyPress }: Pian
                 styles.scrollBarThumb,
                 {
                   width: scrollBarWidth,
-                  left: scrollBarLeft
+                  left: scrollBarLeft,
+                  backgroundColor: whiteKeyColor,
                 },
                 isDragging && styles.scrollBarThumbDragging
               ]}

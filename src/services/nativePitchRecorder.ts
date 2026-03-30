@@ -24,6 +24,10 @@ export const nativePitchRecorder = {
   getRecordingsDirectory: (): Promise<string> =>
     PitchDetectorModule.getRecordingsDirectory(),
 
+  /** 按文件名查找录音（Documents 优先，兼容旧 Caches 路径） */
+  resolveRecordingPath: (filename: string): Promise<string> =>
+    PitchDetectorModule.resolveRecordingPath(filename),
+
   /** 暂停写文件（引擎继续运行） */
   pauseRecording: (): void =>
     PitchDetectorModule.pauseRecording(),

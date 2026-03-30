@@ -9,10 +9,12 @@ import { audioPlayer } from '../utils/audioUtils'
 import { loadUserSettings, saveUserSettings, saveRecordings, savePitchData, getRecordingPath, getPitchDataPath, loadRecordings } from '../services/storage'
 import { UserSettings, AppMode, RecordingState, Recording } from '../types'
 import { PRESET_MODES, CONFIG } from '../config/constants'
+import { useTheme } from '../context/ThemeContext'
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
 
 export function PracticeScreen({ navigation }: any) {
+  const { colors } = useTheme()
   const [appMode, setAppMode] = useState<AppMode>('recording')
   const [recordingState, setRecordingState] = useState<RecordingState>('idle')
   const [currentModeId, setCurrentModeId] = useState<string>('female')
@@ -285,12 +287,12 @@ export function PracticeScreen({ navigation }: any) {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       {/* 标题 */}
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <View style={styles.titleWithIcon}>
           <Ionicons name="musical-note" size={24} color="#9B59B6" style={styles.titleIcon} />
-          <Text style={styles.title}>实时音准练习</Text>
+          <Text style={[styles.title, { color: colors.text }]}>实时音准练习</Text>
         </View>
       </View>
 
@@ -329,40 +331,47 @@ export function PracticeScreen({ navigation }: any) {
         <View style={styles.controls}>
           {/* 状态1：空闲（Idle）- 显示开始按钮 */}
           {recordingState === 'idle' && appMode === 'recording' && (
-            <TouchableOpacity style={[styles.controlButton, styles.recordButton]} onPress={startRecording}>
-              <Text style={styles.controlButtonText}>开始</Text>
+            <TouchableOpacity style={styles.iconButton} onPress={startRecording}>
+              <Ionicons name="mic-outline" size={32} color="#FF3B30" />
+              <Text style={[styles.iconButtonLabel, { color: '#FF3B30' }]}>开始</Text>
             </TouchableOpacity>
           )}
 
           {/* 状态2：录音中（Recording）- 显示暂停按钮 */}
           {recordingState === 'recording' && (
-            <TouchableOpacity style={[styles.controlButton, styles.pauseButton]} onPress={pauseRecording}>
-              <Text style={styles.controlButtonText}>暂停</Text>
+            <TouchableOpacity style={styles.iconButton} onPress={pauseRecording}>
+              <Ionicons name="pause-circle-outline" size={32} color="#FF9500" />
+              <Text style={[styles.iconButtonLabel, { color: '#FF9500' }]}>暂停</Text>
             </TouchableOpacity>
           )}
 
           {/* 状态3：已暂停（Paused）*/}
           {recordingState === 'paused' && (
             <View style={styles.pausedButtonsContainer}>
-              <TouchableOpacity style={[styles.controlButton, styles.discardButton]} onPress={discardRecording}>
-                <Text style={styles.controlButtonText}>放弃</Text>
+              <TouchableOpacity style={styles.iconButton} onPress={discardRecording}>
+                <Ionicons name="trash-outline" size={32} color="#FF3B30" />
+                <Text style={[styles.iconButtonLabel, { color: '#FF3B30' }]}>放弃</Text>
               </TouchableOpacity>
               {isPreviewPlaying ? (
-                <TouchableOpacity style={[styles.controlButton, styles.pausedButton]} onPress={stopPreview}>
-                  <Text style={styles.controlButtonText}>停止 ⏹</Text>
+                <TouchableOpacity style={styles.iconButton} onPress={stopPreview}>
+                  <Ionicons name="stop-circle-outline" size={32} color="#007AFF" />
+                  <Text style={[styles.iconButtonLabel, { color: '#007AFF' }]}>停止</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity style={[styles.controlButton, styles.pausedButton]} onPress={startPreview}>
-                  <Text style={styles.controlButtonText}>播放 ▶</Text>
+                <TouchableOpacity style={styles.iconButton} onPress={startPreview}>
+                  <Ionicons name="play-circle-outline" size={32} color="#007AFF" />
+                  <Text style={[styles.iconButtonLabel, { color: '#007AFF' }]}>播放</Text>
                 </TouchableOpacity>
               )}
               {!reachedDurationLimit && !previewResult && (
-                <TouchableOpacity style={[styles.controlButton, styles.resumeButton]} onPress={resumeRecording}>
-                  <Text style={styles.controlButtonText}>继续 ⏺</Text>
+                <TouchableOpacity style={styles.iconButton} onPress={resumeRecording}>
+                  <Ionicons name="mic-outline" size={32} color="#FF9500" />
+                  <Text style={[styles.iconButtonLabel, { color: '#FF9500' }]}>继续</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity style={[styles.controlButton, styles.saveButton]} onPress={saveAndStopRecording}>
-                <Text style={styles.controlButtonText}>保存</Text>
+              <TouchableOpacity style={styles.iconButton} onPress={saveAndStopRecording}>
+                <Ionicons name="checkmark-circle-outline" size={32} color="#34C759" />
+                <Text style={[styles.iconButtonLabel, { color: '#34C759' }]}>保存</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -370,12 +379,12 @@ export function PracticeScreen({ navigation }: any) {
         </View>
 
         {/* 虚拟钢琴 */}
-        <View style={styles.pianoSection}>
+        <View style={[styles.pianoSection, { borderTopColor: colors.border }]}>
           <TouchableOpacity
-            style={styles.pianoHeader}
+            style={[styles.pianoHeader, { backgroundColor: colors.surface }]}
             onPress={() => setPianoExpanded(!pianoExpanded)}
           >
-            <Text style={styles.pianoHeaderText}>
+            <Text style={[styles.pianoHeaderText, { color: colors.text }]}>
               {pianoExpanded ? '▼' : '▲'} 虚拟钢琴（{currentMode.name}）
             </Text>
           </TouchableOpacity>
@@ -488,7 +497,17 @@ const styles = StyleSheet.create({
   },
   pausedButtonsContainer: {
     flexDirection: 'row',
-    gap: 12
+    gap: 24,
+    alignItems: 'center',
+  },
+  iconButton: {
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  iconButtonLabel: {
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '500',
   },
   pausedButton: {
     backgroundColor: '#007AFF'
