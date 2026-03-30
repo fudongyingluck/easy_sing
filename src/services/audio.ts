@@ -231,6 +231,11 @@ export class AudioService {
     this.playbackResolve = null
   }
 
+  getRecordingElapsed(): number {
+    if (!this.isRecording) return 0
+    return (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
+  }
+
   getCurrentPitchData(): PitchDataPoint[] {
     return [...this.pitchData]
   }

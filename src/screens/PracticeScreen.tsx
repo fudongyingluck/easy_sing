@@ -117,10 +117,10 @@ export function PracticeScreen({ navigation }: any) {
       setRecordingState('recording')
       setRecordingTime(0)
 
-      // 启动录音计时
+      // 启动录音计时（100ms 精度，与音高数据使用同一时间源）
       recordingTimerRef.current = setInterval(() => {
-        setRecordingTime(t => t + 1)
-      }, 1000)
+        setRecordingTime(audioService.getRecordingElapsed())
+      }, 100)
     } catch (error) {
       console.error('Failed to start recording:', error)
     }
@@ -170,10 +170,10 @@ export function PracticeScreen({ navigation }: any) {
       await audioService.resumeRecording()
       setRecordingState('recording')
 
-      // 重新启动录音计时
+      // 重新启动录音计时（100ms 精度，与音高数据使用同一时间源）
       recordingTimerRef.current = setInterval(() => {
-        setRecordingTime(t => t + 1)
-      }, 1000)
+        setRecordingTime(audioService.getRecordingElapsed())
+      }, 100)
     } catch (error) {
       console.error('Failed to resume recording:', error)
     }
