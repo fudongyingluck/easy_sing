@@ -177,7 +177,7 @@ export const PitchCanvas = memo(function PitchCanvas({
             <Stop offset="100%" stopColor="#99C5FF" stopOpacity="1" />
           </LinearGradient>
           <ClipPath id="chartClip">
-            <Rect x={PADDING.left - 2} y={0} width={chartWidth + 2} height={svgHeight} />
+            <Rect x={PADDING.left - 2} y={0} width={chartWidth + 4} height={svgHeight} />
           </ClipPath>
         </Defs>
         <Rect x={0} y={PADDING.top} width={width} height={svgHeight - PADDING.top - PADDING.bottom} fill={colors.chartBackground} />
