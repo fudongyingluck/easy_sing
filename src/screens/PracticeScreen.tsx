@@ -49,9 +49,12 @@ export function PracticeScreen({ navigation }: any) {
       setRecordingDurationLimit(settings.recordingDurationLimit)
     }
     loadData()
-    const unsubscribe = navigation.addListener('focus', loadData)
-    return unsubscribe
-  }, [navigation])
+    const unsubscribeFocus = navigation.addListener('focus', loadData)
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      if (recordingState === 'recording') pauseRecording()
+    })
+    return () => { unsubscribeFocus(); unsubscribeBlur() }
+  }, [navigation, recordingState])
 
   // 双击处理（音域区或钢琴区域）
   const handleDoubleTap = () => {
