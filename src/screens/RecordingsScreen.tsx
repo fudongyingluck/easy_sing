@@ -275,14 +275,14 @@ export function RecordingsScreen({ navigation }: any) {
 
       {/* 全屏播放器 */}
       <Modal visible={playerVisible} animationType="slide" statusBarTranslucent onRequestClose={closePlayer}>
-        <View style={styles.playerContainer}>
+        <View style={[styles.playerContainer, { backgroundColor: colors.background }]}>
           {/* 顶栏 */}
-          <View style={[styles.playerHeader, { paddingTop: insets.top + 8 }]}>
+          <View style={[styles.playerHeader, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
             <View style={{ width: 64 }} />
-            <Text style={styles.playerTitle} numberOfLines={1}>{activeRecording?.name ?? ''}</Text>
+            <Text style={[styles.playerTitle, { color: colors.text }]} numberOfLines={1}>{activeRecording?.name ?? ''}</Text>
             <TouchableOpacity style={styles.closeButton} onPress={closePlayer}>
-              <Text style={styles.closeLabel}>收起</Text>
-              <Ionicons name="chevron-down" size={20} color="#aaa" />
+              <Text style={[styles.closeLabel, { color: colors.textSecondary }]}>收起</Text>
+              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -312,15 +312,15 @@ export function RecordingsScreen({ navigation }: any) {
           </View>
 
           {/* 底部播放控件 */}
-          <View style={[styles.playerControls, { paddingBottom: insets.bottom + 12 }]}>
+          <View style={[styles.playerControls, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background, borderTopColor: colors.border }]}>
             <View style={styles.progressRow}>
-              <Text style={styles.timeText}>{formatDuration(Math.floor(currentTime))}</Text>
-              <View style={styles.progressTrack}>
+              <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatDuration(Math.floor(currentTime))}</Text>
+              <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
                 <View style={[styles.progressFill, {
                   width: `${Math.min(100, (currentTime / Math.max(1, activeRecording?.duration ?? 1)) * 100)}%`
                 }]} />
               </View>
-              <Text style={styles.timeText}>{formatDuration(activeRecording?.duration ?? 0)}</Text>
+              <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatDuration(activeRecording?.duration ?? 0)}</Text>
             </View>
             <TouchableOpacity style={styles.playPauseButton} onPress={togglePlayPause}>
               <Ionicons name={isPlaying ? 'pause' : 'play'} size={32} color="#fff" />
@@ -369,26 +369,27 @@ const styles = StyleSheet.create({
   bottomBarButtonText: { color: '#fff', fontSize: 16, fontWeight: '500' },
 
   // 全屏播放器
-  playerContainer: { flex: 1, backgroundColor: '#111' },
+  playerContainer: { flex: 1 },
   playerHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 8, paddingBottom: 4
+    paddingHorizontal: 8, paddingBottom: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   closeButton: {
     width: 64, height: 44, justifyContent: 'center', alignItems: 'center',
     flexDirection: 'row', gap: 4
   },
-  closeLabel: { color: '#aaa', fontSize: 14 },
-  playerTitle: { flex: 1, fontSize: 16, fontWeight: '600', color: '#fff', textAlign: 'center' },
+  closeLabel: { fontSize: 14 },
+  playerTitle: { flex: 1, fontSize: 16, fontWeight: '600', textAlign: 'center' },
   noChartPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   noChartText: { color: '#666', fontSize: 16 },
   playerControls: {
     paddingHorizontal: 24, paddingTop: 12,
-    backgroundColor: '#111'
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   progressRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 10 },
-  timeText: { fontSize: 12, color: '#aaa', width: 36, textAlign: 'center' },
-  progressTrack: { flex: 1, height: 4, backgroundColor: '#444', borderRadius: 2, overflow: 'hidden' },
+  timeText: { fontSize: 12, width: 36, textAlign: 'center' },
+  progressTrack: { flex: 1, height: 4, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: '#007AFF' },
   playPauseButton: {
     width: 64, height: 64, borderRadius: 32, backgroundColor: '#007AFF',
