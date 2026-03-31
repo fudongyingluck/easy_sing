@@ -358,18 +358,7 @@ export function PracticeScreen({ navigation }: any) {
                 <Ionicons name="trash-outline" size={32} color="#FF3B30" />
                 <Text style={[styles.iconButtonLabel, { color: '#FF3B30' }]}>放弃</Text>
               </TouchableOpacity>
-              {isPreviewPlaying ? (
-                <TouchableOpacity style={styles.iconButton} onPress={stopPreview}>
-                  <Ionicons name="stop-circle-outline" size={32} color="#007AFF" />
-                  <Text style={[styles.iconButtonLabel, { color: '#007AFF' }]}>停止</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.iconButton} onPress={startPreview}>
-                  <Ionicons name="play-circle-outline" size={32} color="#007AFF" />
-                  <Text style={[styles.iconButtonLabel, { color: '#007AFF' }]}>播放</Text>
-                </TouchableOpacity>
-              )}
-              {!reachedDurationLimit && !previewResult && (
+              {!reachedDurationLimit && (
                 <TouchableOpacity style={styles.iconButton} onPress={resumeRecording}>
                   <Ionicons name="mic-outline" size={32} color="#FF9500" />
                   <Text style={[styles.iconButtonLabel, { color: '#FF9500' }]}>继续</Text>

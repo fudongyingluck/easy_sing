@@ -40,7 +40,6 @@ export class AudioService {
     this.recordingId = `rec_${Date.now()}`
     this.pitchData = []
     this.pitchWindow = []
-    this.recordingStartTime = Date.now()
     this.totalPausedTime = 0
     this.isRecording = true
     this.isPaused = false
@@ -48,6 +47,8 @@ export class AudioService {
     NativeModules.AudioSessionModule?.resetForPlayback?.()
     await nativePitchRecorder.startDetection()
     await nativePitchRecorder.startRecording()
+
+    this.recordingStartTime = Date.now()
 
     this.pitchSubscription = nativePitchRecorder.addPitchListener((freq) => {
       this.onPitchEvent(freq)
