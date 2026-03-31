@@ -9,6 +9,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   var reactNativeDelegate: ReactNativeDelegate?
   var reactNativeFactory: RCTReactNativeFactory?
 
+  // RN 内部仍会通过 appDelegate.window 查找窗口，转发给 SceneDelegate
+  @objc var window: UIWindow? {
+    UIApplication.shared.connectedScenes
+      .compactMap { ($0 as? UIWindowScene)?.delegate as? SceneDelegate }
+      .first?.window
+  }
+
   func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil

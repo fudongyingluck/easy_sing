@@ -172,7 +172,7 @@ export function PitchChart({
         showsVerticalScrollIndicator={false}
         onScroll={e => { actualScrollY.current = e.nativeEvent.contentOffset.y }}
         scrollEventThrottle={16}
-        contentContainerStyle={{ paddingBottom: 30 }}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
       >
         <PitchCanvas
           data={data}
