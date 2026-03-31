@@ -129,12 +129,6 @@ RCT_EXPORT_METHOD(startDetection:(RCTPromiseResolveBlock)resolve
   _recordingLock = [[NSLock alloc] init];
   AVAudioInputNode *inputNode = _engine.inputNode;
 
-  // 启用系统内置语音处理（回声消除 + 降噪），iOS 13+
-  if ([inputNode respondsToSelector:@selector(setVoiceProcessingEnabled:error:)]) {
-    NSError *vpError = nil;
-    [inputNode setVoiceProcessingEnabled:YES error:&vpError];
-  }
-
   AVAudioFormat *format = [inputNode outputFormatForBus:0];
   _sampleRate = (float)format.sampleRate;
   _historyCount = 0;
