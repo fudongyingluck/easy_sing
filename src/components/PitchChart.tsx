@@ -22,6 +22,7 @@ interface PitchChartProps {
   onSeekChange?: (time: number) => void
   leftDisplay?: NoteDisplay
   rightDisplay?: NoteDisplay
+  showBothYAxes?: boolean
 }
 
 export function PitchChart({
@@ -36,6 +37,7 @@ export function PitchChart({
   onSeekChange,
   leftDisplay = 'english',
   rightDisplay = 'english',
+  showBothYAxes = true,
 }: PitchChartProps) {
   const { colors } = useTheme()
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
@@ -182,6 +184,7 @@ export function PitchChart({
           svgHeight={svgHeight}
           leftDisplay={leftDisplay}
           rightDisplay={rightDisplay}
+          showBothYAxes={showBothYAxes}
           currentTimeLine={currentTime}
         />
       </ScrollView>

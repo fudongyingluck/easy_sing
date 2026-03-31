@@ -21,6 +21,7 @@ export function PracticeScreen({ navigation }: any) {
   const [customModes, setCustomModes] = useState<any[]>([])
   const [leftYAxisDisplay, setLeftYAxisDisplay] = useState<'english' | 'solfege' | 'number'>('english')
   const [rightYAxisDisplay, setRightYAxisDisplay] = useState<'english' | 'solfege' | 'number'>('english')
+  const [showBothYAxes, setShowBothYAxes] = useState(true)
   const [recordingDurationLimit, setRecordingDurationLimit] = useState(600)
   const [reachedDurationLimit, setReachedDurationLimit] = useState(false)
   const [recordingId, setRecordingId] = useState<string | null>(null)
@@ -44,6 +45,7 @@ export function PracticeScreen({ navigation }: any) {
       setCustomModes(settings.customModes)
       setLeftYAxisDisplay(settings.leftYAxisDisplay)
       setRightYAxisDisplay(settings.rightYAxisDisplay)
+      setShowBothYAxes(settings.showBothYAxes)
       setRecordingDurationLimit(settings.recordingDurationLimit)
     }
     loadData()
@@ -314,6 +316,7 @@ export function PracticeScreen({ navigation }: any) {
               onSeekChange={(t) => setSeekTime(t)}
               leftDisplay={leftYAxisDisplay}
               rightDisplay={rightYAxisDisplay}
+              showBothYAxes={showBothYAxes}
             />
           </View>
         )}

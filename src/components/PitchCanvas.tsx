@@ -52,6 +52,7 @@ export interface PitchCanvasProps {
   svgHeight: number
   leftDisplay?: NoteDisplay
   rightDisplay?: NoteDisplay
+  showBothYAxes?: boolean
   currentTimeLine?: number
 }
 
@@ -65,6 +66,7 @@ export const PitchCanvas = memo(function PitchCanvas({
   svgHeight,
   leftDisplay = 'english',
   rightDisplay = 'english',
+  showBothYAxes = true,
   currentTimeLine,
 }: PitchCanvasProps) {
   const { colors } = useTheme()
@@ -201,7 +203,7 @@ export const PitchCanvas = memo(function PitchCanvas({
           </SvgText>
         ))}
 
-        {yAxisLabels.map(label => (
+        {showBothYAxes && yAxisLabels.map(label => (
           <SvgText key={`yr-${label.note}`}
             x={width - PADDING.right - 4} y={getMidiY(label.midi) + 4}
             fontSize={10} fill={colors.chartLabel} textAnchor="end">
