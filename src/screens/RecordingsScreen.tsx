@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share, Modal } from 'react-native'
+import React, { useState, useEffect, useRef } from 'react'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share, Modal, PanResponder } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from 'react-native-vector-icons/Ionicons'
 import { Recording, PitchDataPoint } from '../types'
 import { loadRecordings, saveRecordings, deleteRecordingFiles, loadPitchData } from '../services/storage'
 import { audioService } from '../services/audio'
-import { PitchChart } from '../components/PitchChart'
+import { PlaybackPitchChart } from '../components/PlaybackPitchChart'
 import { freqToMidi, midiToNoteName } from '../utils/noteUtils'
 import { useTheme } from '../context/ThemeContext'
 
@@ -24,6 +24,35 @@ export function RecordingsScreen({ navigation }: any) {
   const [pitchData, setPitchData] = useState<PitchDataPoint[]>([])
   const [pitchNoteRange, setPitchNoteRange] = useState<{ minNote: string; maxNote: string }>({ minNote: 'C3', maxNote: 'C6' })
   const [chartAreaHeight, setChartAreaHeight] = useState(0)
+
+  // 进度条 seek 相关 refs（避免 PanResponder stale closure）
+  const isPlayingRef = useRef(isPlaying)
+  const activeRecordingRef = useRef(activeRecording)
+  const trackWidthRef = useRef(0)
+  const seekStartXRef = useRef(0)
+  useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
+  useEffect(() => { activeRecordingRef.current = activeRecording }, [activeRecording])
+
+  const seekPanResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => !isPlayingRef.current,
+    onMoveShouldSetPanResponder: () => !isPlayingRef.current,
+    onPanResponderGrant: (e) => {
+      if (trackWidthRef.current <= 0) return
+      seekStartXRef.current = e.nativeEvent.locationX
+      const ratio = Math.max(0, Math.min(1, e.nativeEvent.locationX / trackWidthRef.current))
+      const t = ratio * (activeRecordingRef.current?.duration ?? 0)
+      setCurrentTime(t)
+      audioService.seekTo(t)
+    },
+    onPanResponderMove: (_, { dx }) => {
+      if (trackWidthRef.current <= 0) return
+      const x = seekStartXRef.current + dx
+      const ratio = Math.max(0, Math.min(1, x / trackWidthRef.current))
+      const t = ratio * (activeRecordingRef.current?.duration ?? 0)
+      setCurrentTime(t)
+      audioService.seekTo(t)
+    },
+  })).current
 
   // 格式化时长
   const formatDuration = (seconds: number): string => {
@@ -66,6 +95,11 @@ export function RecordingsScreen({ navigation }: any) {
   }
 
   useEffect(() => { loadRecordingsList() }, [])
+
+  // 组件卸载时停止播放，防止 timer 持续引用已卸载组件
+  useEffect(() => {
+    return () => { audioService.stopPlayback() }
+  }, [])
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', loadRecordingsList)
@@ -292,15 +326,15 @@ export function RecordingsScreen({ navigation }: any) {
             onLayout={(e) => setChartAreaHeight(e.nativeEvent.layout.height)}
           >
             {chartAreaHeight > 0 && pitchData.length > 0 ? (
-              <PitchChart
+              <PlaybackPitchChart
                 data={pitchData}
                 minNote={pitchNoteRange.minNote}
                 maxNote={pitchNoteRange.maxNote}
-                height={chartAreaHeight}
+                totalDuration={activeRecording?.duration ?? 0}
                 currentTime={currentTime}
-                paused={!isPlaying}
-                seekable
-                onSeekChange={(t) => audioService.seekTo(t)}
+                isPlaying={isPlaying}
+                height={chartAreaHeight}
+                onSeek={(t) => { setCurrentTime(t); audioService.seekTo(t) }}
               />
             ) : (
               <View style={styles.noChartPlaceholder}>
@@ -315,11 +349,22 @@ export function RecordingsScreen({ navigation }: any) {
           <View style={[styles.playerControls, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background, borderTopColor: colors.border }]}>
             <View style={styles.progressRow}>
               <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatDuration(Math.floor(currentTime))}</Text>
-              <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
-                <View style={[styles.progressFill, {
-                  width: `${Math.min(100, (currentTime / Math.max(1, activeRecording?.duration ?? 1)) * 100)}%`
-                }]} />
-              </View>
+              {(() => {
+                const fillPercent = Math.min(100, (currentTime / Math.max(1, activeRecording?.duration ?? 1)) * 100)
+                const thumbLeft = trackWidthRef.current > 0 ? (fillPercent / 100) * trackWidthRef.current - 7 : -7
+                return (
+                  <View
+                    style={styles.progressTrackWrapper}
+                    onLayout={e => { trackWidthRef.current = e.nativeEvent.layout.width }}
+                    {...seekPanResponder.panHandlers}
+                  >
+                    <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+                      <View style={[styles.progressFill, { width: `${fillPercent}%` }]} />
+                    </View>
+                    <View style={[styles.progressThumb, { left: thumbLeft }]} />
+                  </View>
+                )
+              })()}
               <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatDuration(activeRecording?.duration ?? 0)}</Text>
             </View>
             <TouchableOpacity style={styles.playPauseButton} onPress={togglePlayPause}>
@@ -389,8 +434,16 @@ const styles = StyleSheet.create({
   },
   progressRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 10 },
   timeText: { fontSize: 12, width: 36, textAlign: 'center' },
-  progressTrack: { flex: 1, height: 4, borderRadius: 2, overflow: 'hidden' },
+  progressTrackWrapper: { flex: 1, height: 14, justifyContent: 'center' },
+  progressTrack: { height: 4, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: '#007AFF' },
+  progressThumb: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#007AFF',
+  },
   playPauseButton: {
     width: 64, height: 64, borderRadius: 32, backgroundColor: '#007AFF',
     justifyContent: 'center', alignItems: 'center', alignSelf: 'center'
