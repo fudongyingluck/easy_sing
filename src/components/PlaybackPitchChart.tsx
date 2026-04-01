@@ -108,6 +108,9 @@ export function PlaybackPitchChart({
     ),
   )
 
+  // 红线顶部：SVG 小于可视区时被 justifyContent:flex-end 推到底部，需偏移空白高度
+  const redLineTop = Math.max(0, visibleHeight - svgHeight) + PADDING.top
+
   // 竖向初始居中
   const [initialScrollDone, setInitialScrollDone] = useState(false)
   const scrollViewRef = useRef<ScrollView>(null)
@@ -235,7 +238,7 @@ export function PlaybackPitchChart({
       {/* 红线 overlay：position absolute，clamp 后永远可见 */}
       <View
         pointerEvents="none"
-        style={[styles.redLine, { left: redLineX - 1, bottom: X_AXIS_HEIGHT }]}
+        style={[styles.redLine, { left: redLineX - 1, top: redLineTop, bottom: X_AXIS_HEIGHT + PADDING.bottom }]}
       />
 
       {/* 手势 overlay（覆盖画布区，不含 X 轴） */}
@@ -251,7 +254,6 @@ const styles = StyleSheet.create({
   container: {},
   redLine: {
     position: 'absolute',
-    top: 0,
     width: 2,
     backgroundColor: '#FF3B30',
     opacity: 0.85,
