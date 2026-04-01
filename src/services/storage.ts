@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import RNFS from 'react-native-fs'
 import { UserSettings, Recording, PitchData, Mode } from '../types'
 import { PRESET_MODES } from '../config/constants'
 
@@ -121,7 +122,15 @@ export async function deleteRecordingFiles(recording: Recording): Promise<void> 
     if (recording.pitchDataKey) {
       await AsyncStorage.removeItem(recording.pitchDataKey)
     }
-    // 注意：实际音频文件需要用文件系统 API 删除
+    // 删除音频文件
+    if (recording.audioFilePath) {
+      try {
+        const exists = await RNFS.exists(recording.audioFilePath)
+        if (exists) await RNFS.unlink(recording.audioFilePath)
+      } catch (e) {
+        console.warn('Failed to delete audio file:', recording.audioFilePath, e)
+      }
+    }
   } catch (error) {
     console.error('Failed to delete recording files:', error)
   }

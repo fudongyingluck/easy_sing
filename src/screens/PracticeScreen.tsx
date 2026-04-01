@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Ionicons from 'react-native-vector-icons/Ionicons'
+import RNFS from 'react-native-fs'
 import { PitchChart } from '../components/PitchChart'
 import { Piano } from '../components/Piano'
 import { audioService } from '../services/audio'
@@ -36,6 +37,19 @@ export function PracticeScreen({ navigation }: any) {
 
   const recordingTimerRef = useRef<any>(null)
   const lastTapTimeRef = useRef<number>(0)
+
+  // 组件卸载时清理 timer 和 audioService 回调，防止内存泄漏
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current)
+        recordingTimerRef.current = null
+      }
+      audioService.setOnPitchDataUpdate(null)
+      audioService.setOnMaxDurationReached(null)
+      audioService.stopPlayback()
+    }
+  }, [])
 
   // 每次切换回练习 Tab 时重新加载设置
   useEffect(() => {
@@ -254,13 +268,27 @@ export function PracticeScreen({ navigation }: any) {
 
       audioService.stopPlayback()
 
-      // 若已试听，录音已停止，无需再调 stopRecording
-      if (!previewResult) {
+      let audioPathToDelete: string | null = null
+
+      // 若已试听，录音已停止，audioPath 在 previewResult 里
+      if (previewResult) {
+        audioPathToDelete = previewResult.audioPath
+      } else {
         audioService.setOnPitchDataUpdate(null)
         audioService.setOnMaxDurationReached(null)
+        // 停止录音但不保存，拿到文件路径
+        const result = await audioService.stopRecording()
+        audioPathToDelete = result.audioPath
+      }
 
-      // 停止录音但不保存
-        await audioService.stopRecording()
+      // 删除音频文件
+      if (audioPathToDelete) {
+        try {
+          const exists = await RNFS.exists(audioPathToDelete)
+          if (exists) await RNFS.unlink(audioPathToDelete)
+        } catch (e) {
+          console.warn('Failed to delete audio file:', e)
+        }
       }
 
       // 重置状态

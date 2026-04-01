@@ -64,7 +64,7 @@ export function PitchChart({
   useEffect(() => { seekableRef.current = seekable }, [seekable])
   useEffect(() => { windowWidthRef.current = windowWidth }, [windowWidth])
   useEffect(() => { durationRef.current = duration }, [duration])
-  useEffect(() => { currentTimeRef.current = currentTime }, [currentTime])
+  useLayoutEffect(() => { currentTimeRef.current = currentTime }, [currentTime])
   useEffect(() => { onSeekChangeRef.current = onSeekChange }, [onSeekChange])
 
   const updateTimeOffset = (v: number) => { timeOffsetRef.current = v; setTimeOffset(v) }
