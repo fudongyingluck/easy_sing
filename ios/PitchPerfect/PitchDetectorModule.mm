@@ -129,6 +129,18 @@ RCT_EXPORT_METHOD(startDetection:(RCTPromiseResolveBlock)resolve
   _recordingLock = [[NSLock alloc] init];
   AVAudioInputNode *inputNode = _engine.inputNode;
 
+  // 访问 mainMixerNode 会自动建立 mixer→outputNode 连接，使 VPIO 的输出侧有效，
+  // 从而避免 render err: -1。设置音量为 0 保持静音。
+  _engine.mainMixerNode.outputVolume = 0.0f;
+
+  // 启用系统内置语音处理（回声消除 + 降噪），iOS 13+
+  // 需要 mixer→output 连接存在，否则 AUVoiceIO 输出侧报 render err
+  if ([inputNode respondsToSelector:@selector(setVoiceProcessingEnabled:error:)]) {
+    NSError *vpError = nil;
+    [inputNode setVoiceProcessingEnabled:YES error:&vpError];
+    // vpError 不影响录音主流程，仅在调试时关注
+  }
+
   AVAudioFormat *format = [inputNode outputFormatForBus:0];
   _sampleRate = (float)format.sampleRate;
   _historyCount = 0;
