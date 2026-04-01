@@ -20,6 +20,7 @@ export class AudioService {
   private pitchSubscription: any = null
   private maxDurationInterval: any = null
   private pitchWindow: number[] = []
+  private lastPitchUpdateTime: number = 0
 
   // 播放
   private playbackSound: any = null
@@ -121,7 +122,10 @@ export class AudioService {
 
     this.pitchData.push({ time, freq: corrected, note })
 
-    if (this.onPitchDataUpdate) {
+    // 限流：最多 10Hz 更新 UI，避免每次事件都 spread 整个数组导致内存压力
+    const now = Date.now()
+    if (now - this.lastPitchUpdateTime >= 100 && this.onPitchDataUpdate) {
+      this.lastPitchUpdateTime = now
       this.onPitchDataUpdate([...this.pitchData])
     }
   }
@@ -161,9 +165,21 @@ export class AudioService {
 
     return new Promise((resolve, reject) => {
       const sound = new Sound(resolvedPath, '', (error: any) => {
-        if (error) { reject(error); return }
+        if (error) {
+          // loading 失败：若 sound 还是当前 active，清理掉
+          if (this.playbackSound === sound) this._clearPlayback()
+          sound.release()
+          reject(error)
+          return
+        }
 
-        this.playbackSound = sound
+        // loading 完成前若 stopPlayback 已被调用（playbackSound 已被置 null），放弃播放
+        if (this.playbackSound !== sound) {
+          sound.release()
+          resolve()
+          return
+        }
+
         this.playbackResolve = resolve
 
         if (startTime && startTime > 0) sound.setCurrentTime(startTime)
@@ -175,18 +191,26 @@ export class AudioService {
         }
 
         sound.play(() => {
-          // 只有 sound 还是当前 active 才 release（防止 stopPlayback 已释放后双重释放）
-          if (this.playbackSound === sound) sound.release()
+          // stopPlayback 已处理过（playbackSound 不再是 sound）则直接返回，避免重复 deactivate
+          if (this.playbackSound !== sound) return
+          sound.release()
           this._clearPlayback()
           NativeModules.AudioSessionModule?.deactivate?.()
           resolve()
         })
       })
+      // 立即赋值，确保 stopPlayback 在 loading 期间也能 release
+      this.playbackSound = sound
+      this.playbackResolve = resolve
     })
   }
 
   pausePlayback(): void {
     this.playbackSound?.pause()
+    if (this.playbackTimer) {
+      clearInterval(this.playbackTimer)
+      this.playbackTimer = null
+    }
     // 不调 deactivate：deactivate 会触发 iOS 音频中断，导致 react-native-sound 完成回调异常触发
     // deactivate 只在完全停止（stopPlayback）时执行
   }
@@ -200,9 +224,12 @@ export class AudioService {
         this.playbackSound?.getCurrentTime((seconds: number) => onProgress(seconds))
       }, 100)
     }
-    this.playbackSound.play(() => {
-      this.playbackSound?.release()
+    const resumedSound = this.playbackSound
+    resumedSound.play(() => {
+      if (this.playbackSound !== resumedSound) return  // 已被 stopPlayback 处理
+      resumedSound.release()
       this._clearPlayback()
+      NativeModules.AudioSessionModule?.deactivate?.()
       this.playbackResolve?.()
     })
   }
@@ -213,6 +240,7 @@ export class AudioService {
       this.playbackSound.release()
       NativeModules.AudioSessionModule?.deactivate?.()
     }
+    this.playbackResolve?.()  // 释放挂起的 Promise，确保 async 调用链正常结束
     this._clearPlayback()
   }
 
