@@ -24,6 +24,7 @@ export function PracticeScreen({ navigation }: any) {
   const [rightYAxisDisplay, setRightYAxisDisplay] = useState<'english' | 'solfege' | 'number'>('english')
   const [showBothYAxes, setShowBothYAxes] = useState(true)
   const [recordingDurationLimit, setRecordingDurationLimit] = useState(600)
+  const [pitchDetectionRate, setPitchDetectionRate] = useState<number>(100)
   const [reachedDurationLimit, setReachedDurationLimit] = useState(false)
   const [recordingId, setRecordingId] = useState<string | null>(null)
   const [recordingDuration, setRecordingDuration] = useState(0)
@@ -59,6 +60,7 @@ export function PracticeScreen({ navigation }: any) {
       setRightYAxisDisplay(settings.rightYAxisDisplay)
       setShowBothYAxes(settings.showBothYAxes)
       setRecordingDurationLimit(settings.recordingDurationLimit)
+      setPitchDetectionRate(settings.pitchDetectionRate)
     }
     loadData()
     const unsubscribeFocus = navigation.addListener('focus', loadData)
@@ -131,7 +133,7 @@ export function PracticeScreen({ navigation }: any) {
         audioService.pauseRecording().catch(console.error)
       })
 
-      const id = await audioService.startRecording(recordingDurationLimit)
+      const id = await audioService.startRecording(recordingDurationLimit, pitchDetectionRate)
       setRecordingId(id)
       setRecordingState('recording')
       setRecordingTime(0)

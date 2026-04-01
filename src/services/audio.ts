@@ -35,7 +35,7 @@ export class AudioService {
     this.onMaxDurationReached = callback
   }
 
-  async startRecording(durationLimit: number = DEFAULT_MAX_DURATION): Promise<string> {
+  async startRecording(durationLimit: number = DEFAULT_MAX_DURATION, detectionRate: number = 100): Promise<string> {
     await this.stopAll()
 
     this.recordingId = `rec_${Date.now()}`
@@ -46,7 +46,7 @@ export class AudioService {
     this.isPaused = false
 
     NativeModules.AudioSessionModule?.resetForPlayback?.()
-    await nativePitchRecorder.startDetection()
+    await nativePitchRecorder.startDetection(detectionRate)
     await nativePitchRecorder.startRecording()
 
     this.recordingStartTime = Date.now()

@@ -111,7 +111,8 @@ RCT_EXPORT_METHOD(removeListeners:(double)count) {
 // ---------------------------------------------------------------------------
 // startDetection
 // ---------------------------------------------------------------------------
-RCT_EXPORT_METHOD(startDetection:(RCTPromiseResolveBlock)resolve
+RCT_EXPORT_METHOD(startDetection:(double)detectionRate
+                  resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
   if (_running) { resolve(nil); return; }
 
@@ -146,7 +147,11 @@ RCT_EXPORT_METHOD(startDetection:(RCTPromiseResolveBlock)resolve
   _historyCount = 0;
   memset(_history, 0, sizeof(_history));
 
-  AVAudioFrameCount bufferSize = 2048;
+  // detectionRate Hz → bufferSize（向上取整，最小 128，最大 4096）
+  AVAudioFrameCount bufferSize = (detectionRate > 0)
+    ? (AVAudioFrameCount)MAX(128, MIN(4096, ceil(_sampleRate / detectionRate)))
+    : 2048;
+  NSLog(@"[PitchDetector] detectionRate=%.0fHz sampleRate=%.0fHz bufferSize=%u", detectionRate, _sampleRate, (unsigned)bufferSize);
 
   __weak PitchDetectorModule *weakSelf = self;
   [inputNode installTapOnBus:0 bufferSize:bufferSize format:format
