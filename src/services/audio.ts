@@ -87,12 +87,20 @@ export class AudioService {
   }
 
   async stopRecording(): Promise<{ audioPath: string; duration: number; pitchData: PitchData }> {
+    // 若当前处于暂停状态，先把本次暂停时长计入 totalPausedTime，
+    // 否则 duration 会把暂停时间也算进去（导致保存时长 > 实际文件时长）
+    if (this.isPaused && this.pauseStartTime > 0) {
+      this.totalPausedTime += Date.now() - this.pauseStartTime
+      this.pauseStartTime = 0
+    }
+
+    // 在调用 stopAll() 之前记录时长，避免 stopDetection 耗时被计入 duration
+    const duration = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
+
     const audioPath = await this.stopAll()
     this.isRecording = false
     this.isPaused = false
     NativeModules.AudioSessionModule?.deactivate?.()
-
-    const duration = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
 
     return {
       audioPath,

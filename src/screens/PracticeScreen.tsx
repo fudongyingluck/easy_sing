@@ -29,9 +29,7 @@ export function PracticeScreen({ navigation }: any) {
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [pitchData, setPitchData] = useState<any[]>([])
   const [recordingTime, setRecordingTime] = useState(0)
-  const [seekTime, setSeekTime] = useState(0)
-  const [previewResult, setPreviewResult] = useState<{ audioPath: string; duration: number; pitchData: any } | null>(null)
-  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false)
+
   const [pianoExpanded, setPianoExpanded] = useState(true)
   const [chartAreaHeight, setChartAreaHeight] = useState(SCREEN_HEIGHT * 5 / 12)
 
@@ -161,29 +159,6 @@ export function PracticeScreen({ navigation }: any) {
     }
   }
 
-  // 试听（暂停后播放已录内容）
-  const startPreview = async () => {
-    try {
-      audioService.setOnPitchDataUpdate(null)
-      audioService.setOnMaxDurationReached(null)
-      const result = await audioService.stopRecording()
-      setPreviewResult(result)
-      setIsPreviewPlaying(true)
-      await audioService.playAudio(result.audioPath, (time) => setRecordingTime(time), seekTime)
-      setRecordingTime(result.duration)
-    } catch (error) {
-      console.error('Failed to start preview:', error)
-    } finally {
-      setIsPreviewPlaying(false)
-    }
-  }
-
-  const stopPreview = () => {
-    audioService.stopPlayback()
-    setIsPreviewPlaying(false)
-    setRecordingTime(previewResult?.duration ?? 0)
-  }
-
   // 继续录音
   const resumeRecording = async () => {
     try {
@@ -209,16 +184,9 @@ export function PracticeScreen({ navigation }: any) {
       }
 
       audioService.stopPlayback()
-
-      // 若已试听（录音已在 startPreview 中停止），直接用缓存结果；否则正常停止
-      let result: { audioPath: string; duration: number; pitchData: any }
-      if (previewResult) {
-        result = previewResult
-      } else {
-        audioService.setOnPitchDataUpdate(null)
-        audioService.setOnMaxDurationReached(null)
-        result = await audioService.stopRecording()
-      }
+      audioService.setOnPitchDataUpdate(null)
+      audioService.setOnMaxDurationReached(null)
+      const result = await audioService.stopRecording()
       setRecordingState('idle')
       setRecordingDuration(result.duration)
 
@@ -249,9 +217,6 @@ export function PracticeScreen({ navigation }: any) {
       setRecordingId(null)
       setRecordingTime(0)
       setPitchData([])
-      setPreviewResult(null)
-      setIsPreviewPlaying(false)
-      setSeekTime(0)
 
     } catch (error) {
       console.error('Failed to save recording:', error)
@@ -268,18 +233,10 @@ export function PracticeScreen({ navigation }: any) {
 
       audioService.stopPlayback()
 
-      let audioPathToDelete: string | null = null
-
-      // 若已试听，录音已停止，audioPath 在 previewResult 里
-      if (previewResult) {
-        audioPathToDelete = previewResult.audioPath
-      } else {
-        audioService.setOnPitchDataUpdate(null)
-        audioService.setOnMaxDurationReached(null)
-        // 停止录音但不保存，拿到文件路径
-        const result = await audioService.stopRecording()
-        audioPathToDelete = result.audioPath
-      }
+      audioService.setOnPitchDataUpdate(null)
+      audioService.setOnMaxDurationReached(null)
+      const result = await audioService.stopRecording()
+      const audioPathToDelete = result.audioPath
 
       // 删除音频文件
       if (audioPathToDelete) {
@@ -296,9 +253,6 @@ export function PracticeScreen({ navigation }: any) {
       setRecordingId(null)
       setRecordingTime(0)
       setPitchData([])
-      setPreviewResult(null)
-      setIsPreviewPlaying(false)
-      setSeekTime(0)
 
     } catch (error) {
       console.error('Failed to discard recording:', error)
@@ -344,7 +298,7 @@ export function PracticeScreen({ navigation }: any) {
               currentTime={recordingTime}
               paused={recordingState === 'paused'}
               seekable={recordingState === 'paused'}
-              onSeekChange={(t) => setSeekTime(t)}
+
               leftDisplay={leftYAxisDisplay}
               rightDisplay={rightYAxisDisplay}
               showBothYAxes={showBothYAxes}
