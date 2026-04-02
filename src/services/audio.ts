@@ -2,6 +2,7 @@ import { PitchData, PitchDataPoint } from '../types'
 import { CONFIG } from '../config/constants'
 import { midiToNoteName } from '../utils/noteUtils'
 import { nativePitchRecorder } from './nativePitchRecorder'
+import { audioPlayer } from '../utils/audioUtils'
 import { NativeModules } from 'react-native'
 
 const DEFAULT_MAX_DURATION = CONFIG.MAX_RECORDING_DURATION
@@ -158,6 +159,7 @@ export class AudioService {
 
   async playAudio(filePath: string, onProgress?: (time: number) => void, startTime?: number): Promise<void> {
     this.stopPlayback()
+    audioPlayer.release()  // 释放所有钢琴 Sound 对象，防止 session 重激活时 iOS 自动恢复
     NativeModules.AudioSessionModule?.resetForPlayback?.()
 
     // 按文件名查找：Documents 优先，兼容旧 Caches 路径，兼容重装后 UUID 变化
