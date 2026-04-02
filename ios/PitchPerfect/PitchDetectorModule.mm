@@ -83,6 +83,10 @@ static float rms_level(const float *buf, int N) {
   // Pitch stability
   float _history[5];
   int   _historyCount;
+  // Sliding window state
+  double _sampleCount;       // 累计处理的采样数（用于节流时间戳）
+  double _lastEventSample;   // 上次发送事件时的采样位置
+  float  _smoothedFreq;      // EMA 平滑后的频率
   // Recording
   AVAudioFile *_recordingFile;
   BOOL         _isRecordingAudio;
@@ -146,6 +150,9 @@ RCT_EXPORT_METHOD(startDetection:(double)detectionRate
   _sampleRate = (float)format.sampleRate;
   _historyCount = 0;
   memset(_history, 0, sizeof(_history));
+  _sampleCount      = 0;
+  _lastEventSample  = -1e9;
+  _smoothedFreq     = 0.0f;
 
   // detectionRate Hz → bufferSize（向上取整，最小 128，最大 4096）
   AVAudioFrameCount bufferSize = (detectionRate > 0)
@@ -172,29 +179,73 @@ RCT_EXPORT_METHOD(startDetection:(double)detectionRate
       [self->_recordingLock unlock];
     }
 
-    // --- Pitch detection ---
+    // --- Pitch detection: sliding window ---
     float sr = self->_sampleRate;
+
+    // 诊断日志：前5次打印实际 buffer 大小
+    static int _logCount = 0;
+    if (_logCount++ < 5) {
+      NSLog(@"[PitchDetector] actual frames=%d sampleRate=%.0f", frames, sr);
+    }
+
+    // 全 buffer 静音门限：安静时直接跳过
     if (rms_level(samples, frames) < 0.008f) {
       self->_historyCount = 0;
+      self->_smoothedFreq = 0.0f;
+      self->_sampleCount += frames;
       return;
     }
 
-    float freq = yin_detect(samples, frames, sr, 0.12f);
-    if (freq < 60.0f || freq > 1400.0f) {
-      self->_historyCount = 0;
-      return;
+    const int    kWindow              = 2048;        // 分析窗口 ~43ms @ 48kHz（提升 YIN 稳定性）
+    const int    kHop                 = 256;         // 步长 ~5.3ms，每个 4800 帧 buffer 约 10 个窗口
+    const double kMinSamplesBetween   = sr / 50.0;  // 节流到 50Hz（每 960 帧最多发一次）
+
+    int windowsAnalyzed = 0;
+    int windowsValid    = 0;
+    int eventsSent      = 0;
+
+    for (int offset = 0; offset + kWindow <= frames; offset += kHop) {
+      float freq = yin_detect(samples + offset, kWindow, sr, 0.12f);
+      windowsAnalyzed++;
+
+      if (freq < 60.0f || freq > 1400.0f) continue;
+
+      // 八度跳跃保护
+      if (self->_historyCount > 0) {
+        float ref   = self->_history[(self->_historyCount - 1) % 5];
+        float ratio = freq / ref;
+        if (ratio < 0.5f || ratio > 2.0f) continue;
+      }
+
+      // EMA 平滑（α=0.3：平滑噪声，延迟约 2-3 个窗口 ~10-15ms）
+      if (self->_smoothedFreq < 60.0f) {
+        self->_smoothedFreq = freq;   // 冷启动直接赋值
+      } else {
+        self->_smoothedFreq = 0.3f * freq + 0.7f * self->_smoothedFreq;
+      }
+
+      self->_history[self->_historyCount % 5] = freq;
+      self->_historyCount++;
+      windowsValid++;
+
+      // 节流：距上次发送满 20ms 才发
+      double windowSample = self->_sampleCount + offset;
+      if (windowSample - self->_lastEventSample >= kMinSamplesBetween) {
+        self->_lastEventSample = windowSample;
+        float outputFreq = self->_smoothedFreq;
+        [self sendEventWithName:@"onPitchDetected" body:@{@"freq": @(outputFreq)}];
+        eventsSent++;
+      }
     }
 
-    if (self->_historyCount > 0) {
-      float ref = self->_history[(self->_historyCount - 1) % 5];
-      float ratio = freq / ref;
-      if (ratio < 0.5f || ratio > 2.0f) return;
+    self->_sampleCount += frames;
+
+    // 每 50 次 callback 打印一次滑窗统计，确认实现生效
+    static int _statCount = 0;
+    if (++_statCount % 50 == 0) {
+      NSLog(@"[PitchDetector] sliding-window stats: bufFrames=%d windows=%d valid=%d eventsSent=%d smoothedFreq=%.1fHz",
+            frames, windowsAnalyzed, windowsValid, eventsSent, self->_smoothedFreq);
     }
-
-    self->_history[self->_historyCount % 5] = freq;
-    self->_historyCount++;
-
-    [self sendEventWithName:@"onPitchDetected" body:@{@"freq": @(freq)}];
   }];
 
   [_engine prepare];
