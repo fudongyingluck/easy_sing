@@ -5,6 +5,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons'
 import { Recording, PitchDataPoint } from '../types'
 import { loadRecordings, saveRecordings, deleteRecordingFiles, loadPitchData } from '../services/storage'
 import { audioService } from '../services/audio'
+import { nativePitchRecorder } from '../services/nativePitchRecorder'
 import { PlaybackPitchChart } from '../components/PlaybackPitchChart'
 import { freqToMidi, midiToNoteName } from '../utils/noteUtils'
 import { useTheme } from '../context/ThemeContext'
@@ -175,13 +176,33 @@ export function RecordingsScreen({ navigation }: any) {
     openPlayer(recording)
   }
 
+  const renameRecording = (recording: Recording) => {
+    Alert.prompt(
+      '重命名',
+      '请输入新名称',
+      async (newName) => {
+        const trimmed = newName?.trim()
+        if (!trimmed || trimmed === recording.name) return
+        const updatedList = recordings.map(r =>
+          r.id === recording.id ? { ...r, name: trimmed } : r
+        )
+        await saveRecordings(updatedList)
+        setRecordings(updatedList)
+        if (activeRecording?.id === recording.id) {
+          setActiveRecording(prev => prev ? { ...prev, name: trimmed } : prev)
+        }
+      },
+      'plain-text',
+      recording.name,
+    )
+  }
+
   const shareRecording = async (recording: Recording) => {
     if (isSelectionMode) { toggleSelection(recording.id); return }
     try {
-      await Share.share({
-        title: '我的音准练习录音',
-        message: `分享录音：${recording.name}（时长：${formatDuration(recording.duration)}）`,
-      })
+      const filename = recording.audioFilePath.split('/').pop() ?? recording.audioFilePath
+      const fullPath = await nativePitchRecorder.resolveRecordingPath(filename)
+      await Share.share({ url: `file://${fullPath}` })
     } catch (error) {
       Alert.alert('分享失败', '无法分享此录音')
     }
@@ -278,7 +299,7 @@ export function RecordingsScreen({ navigation }: any) {
                 </View>
               )}
               <View style={styles.itemInfo}>
-                <Text style={[styles.itemName, { color: colors.text }]}>♪ {recording.name}</Text>
+                <Text style={[styles.itemName, { color: colors.text }]} onLongPress={() => renameRecording(recording)}>♪ {recording.name}</Text>
                 <Text style={[styles.itemMeta, { color: colors.textSecondary }]}>
                   时长: {formatDuration(recording.duration)}
                   {recording.fileSize > 0 && ` · ${formatFileSize(recording.fileSize)}`}
