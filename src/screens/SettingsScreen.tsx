@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Switch, Alert, Modal, TextInput
 } from 'react-native'
+import Clipboard from '@react-native-clipboard/clipboard'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Ionicons from 'react-native-vector-icons/Ionicons'
 import { PRESET_MODES, CONFIG } from '../config/constants'
@@ -501,6 +502,16 @@ export function SettingsScreen() {
   const [settings, setSettings] = useState<UserSettings | null>(null)
   const [page, setPage] = useState<'main' | 'modes'>('main')
   const [activePicker, setActivePicker] = useState<string | null>(null)
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [emailCopied, setEmailCopied] = useState(false)
+
+  const FEEDBACK_EMAIL = 'dongguafu@gmail.com'
+
+  const copyEmail = () => {
+    Clipboard.setString(FEEDBACK_EMAIL)
+    setEmailCopied(true)
+    setTimeout(() => setEmailCopied(false), 2000)
+  }
 
   useEffect(() => {
     loadUserSettings().then(setSettings)
@@ -629,6 +640,11 @@ export function SettingsScreen() {
           <SettingRow
             icon="information-circle-outline" iconColor="#8E8E93"
             title="版本" value="v1.0"
+          />
+          <SettingRow
+            icon="chatbubble-ellipses-outline" iconColor="#34C759"
+            title="意见反馈"
+            onPress={() => setShowFeedback(true)}
             isLast
           />
         </Section>
@@ -710,9 +726,45 @@ export function SettingsScreen() {
         }}
         onClose={() => setActivePicker(null)}
       />
+
+      {/* 意见反馈 Modal */}
+      <Modal visible={showFeedback} transparent animationType="slide" onRequestClose={() => setShowFeedback(false)}>
+        <TouchableOpacity style={fb.overlay} activeOpacity={1} onPress={() => setShowFeedback(false)} />
+        <View style={[fb.sheet, { backgroundColor: colors.surface }]}>
+          <Text style={[fb.title, { color: colors.text }]}>意见反馈</Text>
+          <Text style={[fb.desc, { color: colors.textSecondary }]}>
+            如果您有任何建议或问题，欢迎发邮件告诉我们：
+          </Text>
+          <Text style={[fb.email, { color: colors.text }]}>✉  {FEEDBACK_EMAIL}</Text>
+          <View style={fb.btnRow}>
+            <TouchableOpacity style={[fb.btn, { backgroundColor: emailCopied ? '#34C759' : '#007AFF' }]} onPress={copyEmail}>
+              <Text style={fb.btnText}>{emailCopied ? '已复制 ✓' : '复制邮箱'}</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={[fb.closeBtn, { borderTopColor: colors.border }]} onPress={() => setShowFeedback(false)}>
+            <Text style={[fb.closeText, { color: colors.textSecondary }]}>关闭</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
+
+const fb = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  sheet: {
+    borderTopLeftRadius: 16, borderTopRightRadius: 16,
+    paddingHorizontal: 24, paddingTop: 24, paddingBottom: 8,
+  },
+  title: { fontSize: 18, fontWeight: '600', marginBottom: 12 },
+  desc: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  email: { fontSize: 16, fontWeight: '500', marginBottom: 20 },
+  btnRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  btn: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  btnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  closeBtn: { borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 16, alignItems: 'center' },
+  closeText: { fontSize: 16 },
+})
 
 const main = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7' },
