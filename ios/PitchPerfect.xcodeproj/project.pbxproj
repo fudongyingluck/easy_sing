@@ -674,7 +674,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.fdy.test;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fudongyingluck.easysing;
 				PRODUCT_NAME = PitchPerfect;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -704,7 +704,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.fdy.test;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fudongyingluck.easysing;
 				PRODUCT_NAME = PitchPerfect;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
