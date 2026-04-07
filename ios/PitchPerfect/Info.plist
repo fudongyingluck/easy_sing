@@ -40,8 +40,6 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>需要访问麦克风以进行录音和音高检测</string>
 	<key>RCTNewArchEnabled</key>
