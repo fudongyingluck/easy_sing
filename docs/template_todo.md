@@ -22,11 +22,11 @@
 ### F2：从文件导入（不含音高分析）
 可测效果：点「＋」→「从文件导入」→ 选一个 mp3 → 列表出现新模板条目（无音高数据）
 
-- [ ] Native `pickAudioFile`（文件选择器）
-- [ ] Native `copyAudioFileToImports`（复制到沙盒）
-- [ ] JS `documentPicker.ts` 封装
-- [ ] 模板列表显示（名称、时长、来源文件名）
-- [ ] 超过 10 分钟弹确认截断提示
+- [x] Native `pickAudioFile`（文件选择器）
+- [x] Native `copyAudioFileToImports`（复制到沙盒）
+- [x] JS `documentPicker.ts` 封装
+- [x] 模板列表显示（名称、时长、来源文件名）
+- [x] 超过 10 分钟弹确认截断提示
 
 ### F3：音高分析
 可测效果：导入文件后看到 Loading 转圈，结束后点击模板能看到音高曲线（此时还不能播放音频）
