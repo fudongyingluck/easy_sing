@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Alert, Linking } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Ionicons from 'react-native-vector-icons/Ionicons'
 import RNFS from 'react-native-fs'
@@ -142,8 +142,21 @@ export function PracticeScreen({ navigation }: any) {
       recordingTimerRef.current = setInterval(() => {
         setRecordingTime(audioService.getRecordingElapsed())
       }, 100)
-    } catch (error) {
-      console.error('Failed to start recording:', error)
+    } catch (error: any) {
+      if (error?.code === 'permission_denied_settings') {
+        Alert.alert(
+          '需要麦克风权限',
+          '请前往设置开启麦克风权限，才能使用录音功能。',
+          [
+            { text: '取消', style: 'cancel' },
+            { text: '去设置', onPress: () => Linking.openURL('app-settings:') },
+          ]
+        )
+      } else if (error?.code === 'permission_denied') {
+        // 第一次拒绝，静默处理
+      } else {
+        console.error('Failed to start recording:', error)
+      }
     }
   }
 

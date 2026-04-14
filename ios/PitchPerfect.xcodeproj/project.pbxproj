@@ -674,7 +674,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.fudongyingluck.easysing;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fudongyingluck.easysing.dev;
 				PRODUCT_NAME = PitchPerfect;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -705,7 +705,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.fudongyingluck.easysing;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fudongyingluck.easysing.dev;
 				PRODUCT_NAME = PitchPerfect;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
