@@ -6,6 +6,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons'
 import { PracticeScreen } from './screens/PracticeScreen'
 import { RecordingsScreen } from './screens/RecordingsScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
+import { TemplatesScreen } from './screens/TemplatesScreen'
 import { initStorage } from './services/storage'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 
@@ -47,6 +48,16 @@ function AppNavigator() {
             tabBarLabel: '记录',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="folder" size={size} color={color} />
+            )
+          }}
+        />
+        <Tab.Screen
+          name="Templates"
+          component={TemplatesScreen}
+          options={{
+            tabBarLabel: '模板',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="layers-outline" size={size} color={color} />
             )
           }}
         />
