@@ -1,5 +1,6 @@
 #import "PitchDetectorModule.h"
 #import <AVFoundation/AVFoundation.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 // ---------------------------------------------------------------------------
 // Pitch detection: YIN algorithm, pure C
@@ -92,6 +93,9 @@ static float rms_level(const float *buf, int N) {
   BOOL         _isRecordingAudio;
   NSString    *_recordingPath;
   NSLock      *_recordingLock;
+  // File picker
+  RCTPromiseResolveBlock _pickResolve;
+  RCTPromiseRejectBlock  _pickReject;
 }
 
 RCT_EXPORT_MODULE(PitchDetectorModule)
@@ -381,6 +385,87 @@ RCT_EXPORT_METHOD(resumeRecording) {
   if (_recordingFile) {
     _isRecordingAudio = YES;
   }
+}
+
+// ---------------------------------------------------------------------------
+// pickAudioFile — 弹出系统文件选择器，返回临时文件路径，取消返回 null
+// ---------------------------------------------------------------------------
+RCT_EXPORT_METHOD(pickAudioFile:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  if (_pickResolve) { reject(@"BUSY", @"A file picker is already open", nil); return; }
+  _pickResolve = resolve;
+  _pickReject  = reject;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NSArray<UTType *> *types = @[UTTypeAudio];
+    UIDocumentPickerViewController *picker =
+      [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types asCopy:YES];
+    picker.delegate = self;
+    picker.allowsMultipleSelection = NO;
+    UIViewController *root = [UIApplication sharedApplication].keyWindow.rootViewController;
+    while (root.presentedViewController) root = root.presentedViewController;
+    [root presentViewController:picker animated:YES completion:nil];
+  });
+}
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller
+didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+  NSURL *url = urls.firstObject;
+  if (_pickResolve) {
+    _pickResolve(url ? url.path : [NSNull null]);
+    _pickResolve = nil; _pickReject = nil;
+  }
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
+  if (_pickResolve) {
+    _pickResolve([NSNull null]);
+    _pickResolve = nil; _pickReject = nil;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// copyAudioFileToImports — 复制到 Documents/PitchPerfect/Imports/
+// ---------------------------------------------------------------------------
+RCT_EXPORT_METHOD(copyAudioFileToImports:(NSString *)srcPath
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *docsDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    NSString *importsDir = [[docsDir stringByAppendingPathComponent:@"PitchPerfect"] stringByAppendingPathComponent:@"Imports"];
+    NSError *error = nil;
+    [fm createDirectoryAtPath:importsDir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSURL *srcURL = [NSURL fileURLWithPath:srcPath];
+    NSString *ext  = srcURL.pathExtension;
+    NSString *base = srcURL.URLByDeletingPathExtension.lastPathComponent;
+    NSString *uniqueName = [NSString stringWithFormat:@"%@_%ld.%@", base, (long)[[NSDate date] timeIntervalSince1970], ext];
+    NSString *destPath = [importsDir stringByAppendingPathComponent:uniqueName];
+    if ([fm copyItemAtPath:srcPath toPath:destPath error:&error]) {
+      resolve(destPath);
+    } else {
+      reject(@"COPY_FAILED", error.localizedDescription, error);
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// getAudioDuration — 读取音频时长（秒）
+// ---------------------------------------------------------------------------
+RCT_EXPORT_METHOD(getAudioDuration:(NSString *)filePath
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  NSURL *url = [NSURL fileURLWithPath:filePath];
+  AVURLAsset *asset = [AVURLAsset assetWithURL:url];
+  [asset loadValuesAsynchronouslyForKeys:@[@"duration"] completionHandler:^{
+    NSError *error = nil;
+    AVKeyValueStatus status = [asset statusOfValueForKey:@"duration" error:&error];
+    if (status == AVKeyValueStatusLoaded) {
+      double seconds = CMTimeGetSeconds(asset.duration);
+      resolve(@(isfinite(seconds) ? seconds : 0.0));
+    } else {
+      reject(@"DURATION_FAILED", error.localizedDescription ?: @"unknown", error);
+    }
+  }];
 }
 
 // ---------------------------------------------------------------------------
