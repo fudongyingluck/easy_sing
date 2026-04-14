@@ -120,140 +120,156 @@ RCT_EXPORT_METHOD(startDetection:(double)detectionRate
                   rejecter:(RCTPromiseRejectBlock)reject) {
   if (_running) { resolve(nil); return; }
 
-  NSError *error = nil;
-  AVAudioSession *session = [AVAudioSession sharedInstance];
-  [session setCategory:AVAudioSessionCategoryPlayAndRecord
-           withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker |
-                       AVAudioSessionCategoryOptionAllowBluetooth
-                 error:&error];
-  if (error) { reject(@"session_error", @"AVAudioSession category failed", error); return; }
-  [session setActive:YES error:&error];
-  if (error) { reject(@"session_error", @"AVAudioSession activate failed", error); return; }
-
-  _engine = [[AVAudioEngine alloc] init];
-  _recordingLock = [[NSLock alloc] init];
-  AVAudioInputNode *inputNode = _engine.inputNode;
-
-  // 访问 mainMixerNode 会自动建立 mixer→outputNode 连接，使 VPIO 的输出侧有效，
-  // 从而避免 render err: -1。设置音量为 0 保持静音。
-  _engine.mainMixerNode.outputVolume = 0.0f;
-
-  // 启用系统内置语音处理（回声消除 + 降噪），iOS 13+
-  // 需要 mixer→output 连接存在，否则 AUVoiceIO 输出侧报 render err
-  if ([inputNode respondsToSelector:@selector(setVoiceProcessingEnabled:error:)]) {
-    NSError *vpError = nil;
-    [inputNode setVoiceProcessingEnabled:YES error:&vpError];
-    // vpError 不影响录音主流程，仅在调试时关注
+  // 先请求麦克风权限，等用户响应后再启动引擎，避免权限弹窗出现时录音计时器已经开始
+  // 如果已经明确拒绝过（denied），直接返回 permission_denied_settings，让 JS 层引导去设置
+  // 如果是第一次（undetermined），弹系统框，拒绝后静默返回 permission_denied
+  AVAudioSessionRecordPermission currentPermission = [[AVAudioSession sharedInstance] recordPermission];
+  if (currentPermission == AVAudioSessionRecordPermissionDenied) {
+    reject(@"permission_denied_settings", @"Microphone permission denied", nil);
+    return;
   }
 
-  AVAudioFormat *format = [inputNode outputFormatForBus:0];
-  _sampleRate = (float)format.sampleRate;
-  _historyCount = 0;
-  memset(_history, 0, sizeof(_history));
-  _sampleCount      = 0;
-  _lastEventSample  = -1e9;
-  _smoothedFreq     = 0.0f;
-
-  // detectionRate Hz → bufferSize（向上取整，最小 128，最大 4096）
-  AVAudioFrameCount bufferSize = (detectionRate > 0)
-    ? (AVAudioFrameCount)MAX(128, MIN(4096, ceil(_sampleRate / detectionRate)))
-    : 2048;
-  NSLog(@"[PitchDetector] detectionRate=%.0fHz sampleRate=%.0fHz bufferSize=%u", detectionRate, _sampleRate, (unsigned)bufferSize);
-
-  __weak PitchDetectorModule *weakSelf = self;
-  [inputNode installTapOnBus:0 bufferSize:bufferSize format:format
-                       block:^(AVAudioPCMBuffer *buffer, AVAudioTime *when) {
-    PitchDetectorModule *self = weakSelf;
-    if (!self || !self->_running) return;
-
-    float *samples = buffer.floatChannelData[0];
-    int frames = (int)buffer.frameLength;
-
-    // --- Recording ---
-    if (self->_isRecordingAudio) {
-      [self->_recordingLock lock];
-      if (self->_recordingFile) {
-        NSError *writeError = nil;
-        [self->_recordingFile writeFromBuffer:buffer error:&writeError];
-      }
-      [self->_recordingLock unlock];
-    }
-
-    // --- Pitch detection: sliding window ---
-    float sr = self->_sampleRate;
-
-    // 诊断日志：前5次打印实际 buffer 大小
-    static int _logCount = 0;
-    if (_logCount++ < 5) {
-      NSLog(@"[PitchDetector] actual frames=%d sampleRate=%.0f", frames, sr);
-    }
-
-    // 全 buffer 静音门限：安静时直接跳过
-    if (rms_level(samples, frames) < 0.008f) {
-      self->_historyCount = 0;
-      self->_smoothedFreq = 0.0f;
-      self->_sampleCount += frames;
+  [[AVAudioSession sharedInstance] requestRecordPermission:^(BOOL granted) {
+    if (!granted) {
+      reject(@"permission_denied", @"Microphone permission denied", nil);
       return;
     }
 
-    const int    kWindow              = 2048;        // 分析窗口 ~43ms @ 48kHz（提升 YIN 稳定性）
-    const int    kHop                 = 256;         // 步长 ~5.3ms，每个 4800 帧 buffer 约 10 个窗口
-    const double kMinSamplesBetween   = sr / 50.0;  // 节流到 50Hz（每 960 帧最多发一次）
+    NSError *error = nil;
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    [session setCategory:AVAudioSessionCategoryPlayAndRecord
+             withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker |
+                         AVAudioSessionCategoryOptionAllowBluetooth
+                   error:&error];
+    if (error) { reject(@"session_error", @"AVAudioSession category failed", error); return; }
+    [session setActive:YES error:&error];
+    if (error) { reject(@"session_error", @"AVAudioSession activate failed", error); return; }
 
-    int windowsAnalyzed = 0;
-    int windowsValid    = 0;
-    int eventsSent      = 0;
+    _engine = [[AVAudioEngine alloc] init];
+    _recordingLock = [[NSLock alloc] init];
+    AVAudioInputNode *inputNode = _engine.inputNode;
 
-    for (int offset = 0; offset + kWindow <= frames; offset += kHop) {
-      float freq = yin_detect(samples + offset, kWindow, sr, 0.12f);
-      windowsAnalyzed++;
+    // 访问 mainMixerNode 会自动建立 mixer→outputNode 连接，使 VPIO 的输出侧有效，
+    // 从而避免 render err: -1。设置音量为 0 保持静音。
+    _engine.mainMixerNode.outputVolume = 0.0f;
 
-      if (freq < 60.0f || freq > 1400.0f) continue;
-
-      // 八度跳跃保护
-      if (self->_historyCount > 0) {
-        float ref   = self->_history[(self->_historyCount - 1) % 5];
-        float ratio = freq / ref;
-        if (ratio < 0.5f || ratio > 2.0f) continue;
-      }
-
-      // EMA 平滑（α=0.3：平滑噪声，延迟约 2-3 个窗口 ~10-15ms）
-      if (self->_smoothedFreq < 60.0f) {
-        self->_smoothedFreq = freq;   // 冷启动直接赋值
-      } else {
-        self->_smoothedFreq = 0.3f * freq + 0.7f * self->_smoothedFreq;
-      }
-
-      self->_history[self->_historyCount % 5] = freq;
-      self->_historyCount++;
-      windowsValid++;
-
-      // 节流：距上次发送满 20ms 才发
-      double windowSample = self->_sampleCount + offset;
-      if (windowSample - self->_lastEventSample >= kMinSamplesBetween) {
-        self->_lastEventSample = windowSample;
-        float outputFreq = self->_smoothedFreq;
-        [self sendEventWithName:@"onPitchDetected" body:@{@"freq": @(outputFreq)}];
-        eventsSent++;
-      }
+    // 启用系统内置语音处理（回声消除 + 降噪），iOS 13+
+    // 需要 mixer→output 连接存在，否则 AUVoiceIO 输出侧报 render err
+    if ([inputNode respondsToSelector:@selector(setVoiceProcessingEnabled:error:)]) {
+      NSError *vpError = nil;
+      [inputNode setVoiceProcessingEnabled:YES error:&vpError];
+      // vpError 不影响录音主流程，仅在调试时关注
     }
 
-    self->_sampleCount += frames;
+    AVAudioFormat *format = [inputNode outputFormatForBus:0];
+    _sampleRate = (float)format.sampleRate;
+    _historyCount = 0;
+    memset(_history, 0, sizeof(_history));
+    _sampleCount      = 0;
+    _lastEventSample  = -1e9;
+    _smoothedFreq     = 0.0f;
 
-    // 每 50 次 callback 打印一次滑窗统计，确认实现生效
-    static int _statCount = 0;
-    if (++_statCount % 50 == 0) {
-      NSLog(@"[PitchDetector] sliding-window stats: bufFrames=%d windows=%d valid=%d eventsSent=%d smoothedFreq=%.1fHz",
-            frames, windowsAnalyzed, windowsValid, eventsSent, self->_smoothedFreq);
-    }
+    // detectionRate Hz → bufferSize（向上取整，最小 128，最大 4096）
+    AVAudioFrameCount bufferSize = (detectionRate > 0)
+      ? (AVAudioFrameCount)MAX(128, MIN(4096, ceil(_sampleRate / detectionRate)))
+      : 2048;
+    NSLog(@"[PitchDetector] detectionRate=%.0fHz sampleRate=%.0fHz bufferSize=%u", detectionRate, _sampleRate, (unsigned)bufferSize);
+
+    __weak PitchDetectorModule *weakSelf = self;
+    [inputNode installTapOnBus:0 bufferSize:bufferSize format:format
+                         block:^(AVAudioPCMBuffer *buffer, AVAudioTime *when) {
+      PitchDetectorModule *self = weakSelf;
+      if (!self || !self->_running) return;
+
+      float *samples = buffer.floatChannelData[0];
+      int frames = (int)buffer.frameLength;
+
+      // --- Recording ---
+      if (self->_isRecordingAudio) {
+        [self->_recordingLock lock];
+        if (self->_recordingFile) {
+          NSError *writeError = nil;
+          [self->_recordingFile writeFromBuffer:buffer error:&writeError];
+        }
+        [self->_recordingLock unlock];
+      }
+
+      // --- Pitch detection: sliding window ---
+      float sr = self->_sampleRate;
+
+      // 诊断日志：前5次打印实际 buffer 大小
+      static int _logCount = 0;
+      if (_logCount++ < 5) {
+        NSLog(@"[PitchDetector] actual frames=%d sampleRate=%.0f", frames, sr);
+      }
+
+      // 全 buffer 静音门限：安静时直接跳过
+      if (rms_level(samples, frames) < 0.008f) {
+        self->_historyCount = 0;
+        self->_smoothedFreq = 0.0f;
+        self->_sampleCount += frames;
+        return;
+      }
+
+      const int    kWindow              = 2048;        // 分析窗口 ~43ms @ 48kHz（提升 YIN 稳定性）
+      const int    kHop                 = 256;         // 步长 ~5.3ms，每个 4800 帧 buffer 约 10 个窗口
+      const double kMinSamplesBetween   = sr / 50.0;  // 节流到 50Hz（每 960 帧最多发一次）
+
+      int windowsAnalyzed = 0;
+      int windowsValid    = 0;
+      int eventsSent      = 0;
+
+      for (int offset = 0; offset + kWindow <= frames; offset += kHop) {
+        float freq = yin_detect(samples + offset, kWindow, sr, 0.12f);
+        windowsAnalyzed++;
+
+        if (freq < 60.0f || freq > 1400.0f) continue;
+
+        // 八度跳跃保护
+        if (self->_historyCount > 0) {
+          float ref   = self->_history[(self->_historyCount - 1) % 5];
+          float ratio = freq / ref;
+          if (ratio < 0.5f || ratio > 2.0f) continue;
+        }
+
+        // EMA 平滑（α=0.3：平滑噪声，延迟约 2-3 个窗口 ~10-15ms）
+        if (self->_smoothedFreq < 60.0f) {
+          self->_smoothedFreq = freq;   // 冷启动直接赋值
+        } else {
+          self->_smoothedFreq = 0.3f * freq + 0.7f * self->_smoothedFreq;
+        }
+
+        self->_history[self->_historyCount % 5] = freq;
+        self->_historyCount++;
+        windowsValid++;
+
+        // 节流：距上次发送满 20ms 才发
+        double windowSample = self->_sampleCount + offset;
+        if (windowSample - self->_lastEventSample >= kMinSamplesBetween) {
+          self->_lastEventSample = windowSample;
+          float outputFreq = self->_smoothedFreq;
+          [self sendEventWithName:@"onPitchDetected" body:@{@"freq": @(outputFreq)}];
+          eventsSent++;
+        }
+      }
+
+      self->_sampleCount += frames;
+
+      // 每 50 次 callback 打印一次滑窗统计，确认实现生效
+      static int _statCount = 0;
+      if (++_statCount % 50 == 0) {
+        NSLog(@"[PitchDetector] sliding-window stats: bufFrames=%d windows=%d valid=%d eventsSent=%d smoothedFreq=%.1fHz",
+              frames, windowsAnalyzed, windowsValid, eventsSent, self->_smoothedFreq);
+      }
+    }];
+
+    [_engine prepare];
+    [_engine startAndReturnError:&error];
+    if (error) { reject(@"engine_error", @"AVAudioEngine start failed", error); return; }
+
+    _running = YES;
+    resolve(nil);
   }];
-
-  [_engine prepare];
-  [_engine startAndReturnError:&error];
-  if (error) { reject(@"engine_error", @"AVAudioEngine start failed", error); return; }
-
-  _running = YES;
-  resolve(nil);
 }
 
 // ---------------------------------------------------------------------------
