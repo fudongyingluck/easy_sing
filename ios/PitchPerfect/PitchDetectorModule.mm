@@ -388,6 +388,76 @@ RCT_EXPORT_METHOD(resumeRecording) {
 }
 
 // ---------------------------------------------------------------------------
+// analyzeAudioFile — 后台 YIN 分析，返回 {points:[{time,freq}], duration}
+// ---------------------------------------------------------------------------
+RCT_EXPORT_METHOD(analyzeAudioFile:(NSString *)filePath
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSError *error = nil;
+    NSURL *url = [NSURL fileURLWithPath:filePath];
+    AVAudioFile *audioFile = [[AVAudioFile alloc] initForReading:url error:&error];
+    if (!audioFile) {
+      reject(@"FILE_ERROR", error.localizedDescription ?: @"Cannot open file", error);
+      return;
+    }
+
+    float sr = (float)audioFile.processingFormat.sampleRate;
+    int numCh = (int)audioFile.processingFormat.channelCount;
+    double fileDuration = (double)audioFile.length / sr;
+    double capDuration  = fmin(fileDuration, 600.0);
+    AVAudioFrameCount maxFrames = (AVAudioFrameCount)(capDuration * sr);
+
+    const int kWindow  = 2048;
+    int stepFrames     = MAX(1, (int)(sr * 0.1));  // 10 Hz output
+    int chunkSize      = (int)sr;                   // 1 second per chunk
+
+    // mono buffer: [carryover(kWindow)] + [chunk(chunkSize)]
+    float *mono = (float *)calloc(kWindow + chunkSize, sizeof(float));
+    AVAudioPCMBuffer *pcm = [[AVAudioPCMBuffer alloc] initWithPCMFormat:audioFile.processingFormat
+                                                          frameCapacity:chunkSize];
+    NSMutableArray *points = [NSMutableArray array];
+    AVAudioFrameCount chunkStart = 0;
+    int nextStep = 0;
+
+    while (chunkStart < maxFrames) {
+      AVAudioFrameCount toRead = (AVAudioFrameCount)MIN(chunkSize, maxFrames - chunkStart);
+      audioFile.framePosition = chunkStart;
+      if (![audioFile readIntoBuffer:pcm frameCount:toRead error:nil] || pcm.frameLength == 0) break;
+
+      int read = (int)pcm.frameLength;
+      float * const *chs = pcm.floatChannelData;
+
+      // Mix to mono → mono[kWindow..]
+      for (int i = 0; i < read; i++) {
+        float s = 0;
+        for (int c = 0; c < numCh; c++) s += chs[c][i];
+        mono[kWindow + i] = (numCh > 1) ? s / numCh : s;
+      }
+
+      // YIN at each 100ms step; window [F, F+kWindow) ⊂ [chunkStart-kWindow, chunkStart+read)
+      int maxStep = (int)chunkStart + read - kWindow;
+      while (nextStep <= maxStep) {
+        double time = (double)nextStep / sr;
+        if (time > capDuration) break;
+        int offset = nextStep - (int)chunkStart + kWindow;
+        float freq  = yin_detect(mono + offset, kWindow, sr, 0.12f);
+        if (freq < 60.0f || freq > 1400.0f) freq = 0.0f;
+        [points addObject:@{@"time": @(time), @"freq": @(freq)}];
+        nextStep += stepFrames;
+      }
+
+      // Carryover: keep last kWindow samples
+      memmove(mono, mono + read, kWindow * sizeof(float));
+      chunkStart += read;
+    }
+
+    free(mono);
+    resolve(@{@"points": points, @"duration": @(capDuration)});
+  });
+}
+
+// ---------------------------------------------------------------------------
 // pickAudioFile — 弹出系统文件选择器，返回临时文件路径，取消返回 null
 // ---------------------------------------------------------------------------
 RCT_EXPORT_METHOD(pickAudioFile:(RCTPromiseResolveBlock)resolve
