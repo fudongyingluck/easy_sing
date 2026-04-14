@@ -53,6 +53,18 @@ export interface UserSettings {
   themeMode: 'light' | 'dark' | 'system'
 }
 
+// 音高模板
+export interface PitchTemplate {
+  id: string
+  name: string
+  sourceFileName: string        // 原始文件名，仅展示用
+  audioFilePath: string         // 沙盒内文件名（不含目录）
+  pitchDataKey: string          // AsyncStorage key
+  duration: number              // 秒
+  createTime: string            // ISO 日期字符串
+  sourceRecordingId?: string    // 若来源为录音转换，记录原录音 id
+}
+
 // 应用状态
 export type AppMode = 'recording' | 'piano'
 

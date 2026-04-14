@@ -293,7 +293,7 @@ export function PracticeScreen({ navigation }: any) {
       {/* 标题 */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <View style={styles.titleWithIcon}>
-          <Ionicons name="musical-note" size={24} color="#9B59B6" style={styles.titleIcon} />
+          <Ionicons name="musical-notes" size={24} color="#9B59B6" style={styles.titleIcon} />
           <Text style={[styles.title, { color: colors.text }]}>实时音准练习</Text>
         </View>
       </View>
