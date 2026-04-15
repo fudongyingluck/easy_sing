@@ -8,7 +8,6 @@ export interface PitchDataPoint {
 // 音高数据文件
 export interface PitchData {
   version: number
-  sampleRate: number  // 每秒数据点数
   duration: number    // 总时长（秒）
   data: PitchDataPoint[]
 }
@@ -62,6 +61,8 @@ export interface PitchTemplate {
   pitchDataKey: string          // AsyncStorage key
   duration: number              // 秒
   createTime: string            // ISO 日期字符串
+  minNote?: string              // 音高范围下限（如 "C3"），分析时写入
+  maxNote?: string              // 音高范围上限（如 "C6"），分析时写入
   sourceRecordingId?: string    // 若来源为录音转换，记录原录音 id
 }
 

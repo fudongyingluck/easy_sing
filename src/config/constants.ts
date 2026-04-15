@@ -2,7 +2,6 @@
 export const CONFIG = {
   // 音高曲线
   DEFAULT_CHART_DURATION: 6,      // 默认显示最近6秒
-  PITCH_DATA_SAMPLE_RATE: 10,    // 每秒保存10个音高数据点（可调整）
 
   // 钢琴
   PIANO_HEIGHT_RATIO: 0.33,      // 钢琴占屏幕高度1/3

@@ -81,6 +81,7 @@ static float rms_level(const float *buf, int N) {
   AVAudioEngine *_engine;
   BOOL _running;
   float _sampleRate;
+  double _detectionRate;      // 用户设置的检测频率（Hz）
   // Pitch stability
   float _history[5];
   int   _historyCount;
@@ -167,6 +168,7 @@ RCT_EXPORT_METHOD(startDetection:(double)detectionRate
 
     AVAudioFormat *format = [inputNode outputFormatForBus:0];
     _sampleRate = (float)format.sampleRate;
+    _detectionRate = (detectionRate > 0) ? detectionRate : 50.0;  // 默认50Hz
     _historyCount = 0;
     memset(_history, 0, sizeof(_history));
     _sampleCount      = 0;
@@ -217,7 +219,7 @@ RCT_EXPORT_METHOD(startDetection:(double)detectionRate
 
       const int    kWindow              = 2048;        // 分析窗口 ~43ms @ 48kHz（提升 YIN 稳定性）
       const int    kHop                 = 256;         // 步长 ~5.3ms，每个 4800 帧 buffer 约 10 个窗口
-      const double kMinSamplesBetween   = sr / 50.0;  // 节流到 50Hz（每 960 帧最多发一次）
+      const double kMinSamplesBetween   = sr / self->_detectionRate;  // 节流到用户设置的检测频率
 
       int windowsAnalyzed = 0;
       int windowsValid    = 0;

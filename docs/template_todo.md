@@ -31,9 +31,9 @@
 ### F3：音高分析
 可测效果：导入文件后看到 Loading 转圈，结束后点击模板能看到音高曲线（此时还不能播放音频）
 
-- [ ] Native `analyzeAudioFile`（后台 YIN 分析，返回 `{points, duration}`）
-- [ ] JS 层调用 + Loading 状态
-- [ ] 音高数据写入 AsyncStorage
+- [x] Native `analyzeAudioFile`（后台 YIN 分析，返回 `{points, duration}`）
+- [x] JS 层调用 + Loading 状态
+- [x] 音高数据写入 AsyncStorage
 - [ ] 分析失败 / 空音频错误处理
 
 ### F4：模板播放（和录音列表一样）
@@ -41,7 +41,7 @@
 
 - [ ] `PitchCanvas` 新增 `templateData` prop（渲染橙色半透明曲线）
 - [ ] `PitchChart` 透传 `templateData`
-- [ ] 模板点击进入播放页
+- [x] 模板点击进入播放页
 
 ### F5：练习页选模板 + 曲线叠加
 可测效果：练习页 Header 有「无模板」按钮 → 选一个模板 → 录音时背景出现橙色参考曲线

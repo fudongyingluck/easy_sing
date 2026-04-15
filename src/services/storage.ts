@@ -106,7 +106,10 @@ export async function loadPitchData(filePath: string): Promise<PitchData | null>
   try {
     const data = await AsyncStorage.getItem(filePath)
     if (data) {
-      return JSON.parse(data)
+      const parsed = JSON.parse(data)
+      // 兼容旧数据：删除不再使用的 sampleRate 字段
+      delete parsed.sampleRate
+      return parsed
     }
     return null
   } catch (error) {

@@ -63,7 +63,13 @@ export async function loadTemplatePitchData(key: string): Promise<PitchData | nu
   if (!key) return null
   try {
     const raw = await AsyncStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      // 兼容旧数据：删除不再使用的 sampleRate 字段
+      delete parsed.sampleRate
+      return parsed
+    }
+    return null
   } catch {
     return null
   }
