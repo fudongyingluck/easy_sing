@@ -1,4 +1,4 @@
-import React, { memo } from 'react'
+import React, { memo, useRef } from 'react'
 import { View, StyleSheet, Text } from 'react-native'
 import Svg, { Line, Text as SvgText, Path, Circle, Rect, Defs, LinearGradient, Stop, ClipPath, G } from 'react-native-svg'
 import { PitchDataPoint } from '../types'
@@ -155,6 +155,12 @@ export const PitchCanvas = memo(function PitchCanvas({
   currentTimeLine,
 }: PitchCanvasProps) {
   const { colors } = useTheme()
+  // 每个实例使用唯一 ID，避免多页面同时挂载时 react-native-svg 全局 ID 冲突
+  const svgId = useRef(`pc${Math.random().toString(36).slice(2, 7)}`).current
+  // react-native-svg 在 Path 数量增加时存在渲染缺失 bug，
+  // 将所有模板线段合并为单个 Path 元素（多子路径），避免元素数量变化
+  const clipId = `${svgId}cl`
+  const gradientId = `${svgId}gr`
   const duration = endTime - startTime
   const midiRange = maxMidi - minMidi
   const chartWidth = width - PADDING.left - PADDING.right
@@ -197,15 +203,15 @@ export const PitchCanvas = memo(function PitchCanvas({
 
   return (
     <>
-      <Svg width={width} height={svgHeight}>
+<Svg width={width} height={svgHeight}>
         <Defs>
-          <LinearGradient id="pitchGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <LinearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
             <Stop offset="0%" stopColor="#99C5FF" stopOpacity="1" />
             <Stop offset="15%" stopColor="#007AFF" stopOpacity="1" />
             <Stop offset="85%" stopColor="#007AFF" stopOpacity="1" />
             <Stop offset="100%" stopColor="#99C5FF" stopOpacity="1" />
           </LinearGradient>
-          <ClipPath id="chartClip">
+          <ClipPath id={clipId}>
             <Rect x={PADDING.left - 2} y={0} width={chartWidth + 4} height={svgHeight} />
           </ClipPath>
         </Defs>
@@ -240,12 +246,11 @@ export const PitchCanvas = memo(function PitchCanvas({
           </SvgText>
         ))}
 
-        <G clipPath="url(#chartClip)">
-          {templateSegmentPaths.map((path, i) => (
-            <Path key={`tmpl-${i}`}
-              d={path} fill="none" stroke="#FF9500" strokeWidth={2.5} opacity={0.4}
-              strokeLinecap="round" strokeLinejoin="round" />
-          ))}
+        <G clipPath={`url(#${clipId})`}>
+          <Path
+            d={templateSegmentPaths.join(' ') || 'M 0 0'}
+            fill="none" stroke="#FF9500" strokeWidth={2.5} opacity={0.4}
+            strokeLinecap="round" strokeLinejoin="round" />
 
           {dots.map((d, i) => (
             <Circle key={`dot-${i}`} cx={d.x} cy={d.y} r={1.5} fill="rgba(0,122,255,0.5)" />
@@ -253,7 +258,7 @@ export const PitchCanvas = memo(function PitchCanvas({
 
           {segmentPaths.map((path, i) => (
             <Path key={`seg-${i}`}
-              d={path} fill="none" stroke="url(#pitchGradient)" strokeWidth={2.5}
+              d={path} fill="none" stroke={`url(#${gradientId})`} strokeWidth={2.5}
               strokeLinecap="round" strokeLinejoin="round" />
           ))}
 
