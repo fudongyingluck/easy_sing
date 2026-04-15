@@ -42,6 +42,89 @@ function formatTimeLabel(s: number): string {
   return `${s}`
 }
 
+const freqToMidi = (freq: number) => 12 * Math.log2(freq / 440) + 69
+
+// 二分查找：找到第一个 data[i].time >= target 的位置
+function bisectLeft(data: PitchDataPoint[], target: number): number {
+  let lo = 0, hi = data.length
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    if (data[mid].time < target) lo = mid + 1
+    else hi = mid
+  }
+  return lo
+}
+
+// 二分查找：找到第一个 data[i].time > target 的位置
+function bisectRight(data: PitchDataPoint[], target: number): number {
+  let lo = 0, hi = data.length
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    if (data[mid].time <= target) lo = mid + 1
+    else hi = mid
+  }
+  return lo
+}
+
+type Point = { x: number; y: number }
+
+function catmullRomPath(pts: Point[]): string {
+  const n = pts.length
+  let d = `M ${pts[0].x} ${pts[0].y}`
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = pts[Math.max(i - 1, 0)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(i + 2, n - 1)]
+    const cp1x = p1.x + (p2.x - p0.x) / 6, cp1y = p1.y + (p2.y - p0.y) / 6
+    const cp2x = p2.x - (p3.x - p1.x) / 6, cp2y = p2.y - (p3.y - p1.y) / 6
+    d += ` C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x} ${p2.y}`
+  }
+  return d
+}
+
+function buildCurvePaths(
+  data: PitchDataPoint[],
+  minMidi: number,
+  maxMidi: number,
+  timeToX: (t: number) => number,
+  getMidiY: (m: number) => number,
+): { paths: string[]; dots: Point[] } {
+  const paths: string[] = []
+  const dots: Point[] = []
+  let curSeg: Point[] | null = null
+  let prevValid: { midi: number; time: number } | null = null
+
+  for (const p of data) {
+    const midi = freqToMidi(p.freq)
+    if (midi < minMidi || midi > maxMidi) {
+      if (curSeg) {
+        if (curSeg.length >= 2) paths.push(catmullRomPath(curSeg))
+        else dots.push(...curSeg)
+        curSeg = null
+      }
+      prevValid = null
+      continue
+    }
+    const pt: Point = { x: timeToX(p.time), y: getMidiY(midi) }
+    if (prevValid === null) {
+      curSeg = [pt]
+    } else {
+      const connected = p.time - prevValid.time < LINE_TIME_GAP && Math.abs(midi - prevValid.midi) < LINE_SEMITONE_GAP
+      if (connected) {
+        curSeg!.push(pt)
+      } else {
+        if (curSeg && curSeg.length >= 2) paths.push(catmullRomPath(curSeg))
+        else if (curSeg) dots.push(...curSeg)
+        curSeg = [pt]
+      }
+    }
+    prevValid = { midi, time: p.time }
+  }
+  if (curSeg) {
+    if (curSeg.length >= 2) paths.push(catmullRomPath(curSeg))
+    else dots.push(...curSeg)
+  }
+  return { paths, dots }
+}
+
 export interface PitchCanvasProps {
   data: PitchDataPoint[]
   templateData?: PitchDataPoint[]
@@ -84,16 +167,6 @@ export const PitchCanvas = memo(function PitchCanvas({
   const timeToX = (time: number) =>
     PADDING.left + ((time - startTime) / duration) * chartWidth
 
-  const freqToMidi = (freq: number) => 12 * Math.log2(freq / 440) + 69
-
-  // Left anchor: last valid point before startTime
-  let leftAnchor: PitchDataPoint | null = null
-  for (let i = data.length - 1; i >= 0; i--) {
-    if (data[i].time < startTime && data[i].freq > 0) { leftAnchor = data[i]; break }
-  }
-  const inViewData = data.filter(p => p.time >= startTime && p.time <= endTime && p.freq > 0)
-  const filteredData = leftAnchor ? [leftAnchor, ...inViewData] : inViewData
-
   // Grid data
   const yAxisLabels = []
   for (let midi = minMidi; midi <= maxMidi; midi++) {
@@ -107,112 +180,20 @@ export const PitchCanvas = memo(function PitchCanvas({
   const xAxisLabels = []
   for (let t = Math.ceil(startTime); t <= startTime + duration; t++) xAxisLabels.push(t)
 
-  // Build dots and segments
-  type Dot = { x: number; y: number }
-  type Segment = { points: Array<{ x: number; y: number }> }
+  // 左右各扩一个 LINE_TIME_GAP 的缓冲，确保跨越视口边界的线段不被截断
+  // 视觉裁切由 SVG clipPath 处理；二分查找 O(log n) 避免遍历整个数组
+  const lo = bisectLeft(data, startTime - LINE_TIME_GAP)
+  const hi = bisectRight(data, endTime + LINE_TIME_GAP)
+  const filteredData = data.slice(lo, hi).filter(p => p.freq > 0)
+  const { paths: segmentPaths, dots } = buildCurvePaths(filteredData, minMidi, maxMidi, timeToX, getMidiY)
 
-  const dots: Dot[] = []
-  const segments: Segment[] = []
-
-  if (filteredData.length > 0) {
-    let currentSegment: Array<{ x: number; y: number }> | null = null
-    let prevValidMidi: number | null = null
-
-    for (let i = 0; i < filteredData.length; i++) {
-      const p = filteredData[i]
-      const midi = freqToMidi(p.freq)
-      if (midi < minMidi || midi > maxMidi) continue
-
-      const x = timeToX(p.time)
-      const y = getMidiY(midi)
-
-      if (prevValidMidi === null) {
-        currentSegment = [{ x, y }]
-      } else {
-        const timeDiff = p.time - filteredData[i - 1].time
-        const midiDiff = Math.abs(midi - prevValidMidi)
-        const connected = timeDiff < LINE_TIME_GAP && midiDiff < LINE_SEMITONE_GAP
-
-        if (connected) {
-          currentSegment!.push({ x, y })
-        } else {
-          if (currentSegment && currentSegment.length >= 2) segments.push({ points: currentSegment })
-          else if (currentSegment) dots.push(...currentSegment)
-          currentSegment = [{ x, y }]
-        }
-      }
-
-      prevValidMidi = midi
-    }
-
-    if (currentSegment && currentSegment.length >= 2) segments.push({ points: currentSegment })
-    else if (currentSegment) dots.push(...currentSegment)
-  }
-
-  // 模板曲线（橙色半透明）—— 复用与主曲线相同的断点判断逻辑
-  const templateSegmentPaths: string[] = []
+  let templateSegmentPaths: string[] = []
   if (templateData && templateData.length > 0) {
-    let tmplLeftAnchor: PitchDataPoint | null = null
-    for (let i = templateData.length - 1; i >= 0; i--) {
-      if (templateData[i].time < startTime && templateData[i].freq > 0) { tmplLeftAnchor = templateData[i]; break }
-    }
-    const tmplInViewRaw = templateData.filter(p => p.time >= startTime && p.time <= endTime && p.freq > 0)
-    const tmplInView = tmplLeftAnchor ? [tmplLeftAnchor, ...tmplInViewRaw] : tmplInViewRaw
-    const tmplSegs: Array<{ x: number; y: number }[]> = []
-    let curSeg: { x: number; y: number }[] | null = null
-    let prevTMidi: number | null = null
-    for (let i = 0; i < tmplInView.length; i++) {
-      const p = tmplInView[i]
-      const midi = freqToMidi(p.freq)
-      if (midi < minMidi || midi > maxMidi) { if (curSeg && curSeg.length >= 2) tmplSegs.push(curSeg); curSeg = null; prevTMidi = null; continue }
-      const pt = { x: timeToX(p.time), y: getMidiY(midi) }
-      if (prevTMidi === null) {
-        curSeg = [pt]
-      } else {
-        const timeDiff = p.time - tmplInView[i - 1].time
-        const midiDiff = Math.abs(midi - prevTMidi)
-        if (timeDiff < LINE_TIME_GAP && midiDiff < LINE_SEMITONE_GAP) {
-          curSeg!.push(pt)
-        } else {
-          if (curSeg && curSeg.length >= 2) tmplSegs.push(curSeg)
-          curSeg = [pt]
-        }
-      }
-      prevTMidi = midi
-    }
-    if (curSeg && curSeg.length >= 2) tmplSegs.push(curSeg)
-    console.log('[tmpl]', startTime.toFixed(1), endTime.toFixed(1), 'segs=' + tmplSegs.length, tmplSegs.map(s => s.length))
-    for (const pts of tmplSegs) {
-      const n = pts.length
-      let d = `M ${pts[0].x} ${pts[0].y}`
-      for (let i = 0; i < n - 1; i++) {
-        const p0 = pts[Math.max(i - 1, 0)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(i + 2, n - 1)]
-        const cp1x = p1.x + (p2.x - p0.x) / 6, cp1y = p1.y + (p2.y - p0.y) / 6
-        const cp2x = p2.x - (p3.x - p1.x) / 6, cp2y = p2.y - (p3.y - p1.y) / 6
-        d += ` C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x} ${p2.y}`
-      }
-      templateSegmentPaths.push(d)
-    }
+    const tlo = bisectLeft(templateData, startTime - LINE_TIME_GAP)
+    const thi = bisectRight(templateData, endTime + LINE_TIME_GAP)
+    const tmplInView = templateData.slice(tlo, thi).filter(p => p.freq > 0)
+    templateSegmentPaths = buildCurvePaths(tmplInView, minMidi, maxMidi, timeToX, getMidiY).paths
   }
-
-  const segmentPaths = segments.map(seg => {
-    const pts = seg.points
-    if (pts.length < 2) return `M ${pts[0].x} ${pts[0].y}`
-    let d = `M ${pts[0].x} ${pts[0].y}`
-    const n = pts.length
-    for (let i = 0; i < n - 1; i++) {
-      const p0 = pts[Math.max(i - 1, 0)]
-      const p1 = pts[i]
-      const p2 = pts[i + 1]
-      const p3 = pts[Math.min(i + 2, n - 1)]
-      const cp1x = p1.x + (p2.x - p0.x) / 6
-      const cp1y = p1.y + (p2.y - p0.y) / 6
-      const cp2x = p2.x - (p3.x - p1.x) / 6
-      const cp2y = p2.y - (p3.y - p1.y) / 6
-      d += ` C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x} ${p2.y}`
-    }
-    return d
-  })
 
   return (
     <>

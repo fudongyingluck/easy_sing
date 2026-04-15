@@ -351,8 +351,8 @@ export function PracticeScreen({ navigation }: any) {
           <Ionicons name="musical-notes" size={24} color="#9B59B6" style={styles.titleIcon} />
           <Text style={[styles.title, { color: colors.text }]}>实时音准练习</Text>
         </View>
-        <TouchableOpacity onPress={openTemplateModal}>
-          <Text style={[styles.templateButtonText, { color: selectedTemplate ? '#FF9500' : '#007AFF' }]} numberOfLines={1}>
+        <TouchableOpacity onPress={openTemplateModal} disabled={recordingState !== 'idle'}>
+          <Text style={[styles.templateButtonText, { color: recordingState !== 'idle' ? colors.textSecondary : selectedTemplate ? '#FF9500' : '#007AFF' }]} numberOfLines={1}>
             {selectedTemplate ? selectedTemplate.name.slice(0, 4) : '无模板'}
           </Text>
         </TouchableOpacity>
