@@ -44,6 +44,7 @@ function formatTimeLabel(s: number): string {
 
 export interface PitchCanvasProps {
   data: PitchDataPoint[]
+  templateData?: PitchDataPoint[]
   startTime: number
   endTime: number
   minMidi: number
@@ -58,6 +59,7 @@ export interface PitchCanvasProps {
 
 export const PitchCanvas = memo(function PitchCanvas({
   data,
+  templateData,
   startTime,
   endTime,
   minMidi,
@@ -147,6 +149,52 @@ export const PitchCanvas = memo(function PitchCanvas({
     else if (currentSegment) dots.push(...currentSegment)
   }
 
+  // 模板曲线（橙色半透明）—— 复用与主曲线相同的断点判断逻辑
+  const templateSegmentPaths: string[] = []
+  if (templateData && templateData.length > 0) {
+    let tmplLeftAnchor: PitchDataPoint | null = null
+    for (let i = templateData.length - 1; i >= 0; i--) {
+      if (templateData[i].time < startTime && templateData[i].freq > 0) { tmplLeftAnchor = templateData[i]; break }
+    }
+    const tmplInViewRaw = templateData.filter(p => p.time >= startTime && p.time <= endTime && p.freq > 0)
+    const tmplInView = tmplLeftAnchor ? [tmplLeftAnchor, ...tmplInViewRaw] : tmplInViewRaw
+    const tmplSegs: Array<{ x: number; y: number }[]> = []
+    let curSeg: { x: number; y: number }[] | null = null
+    let prevTMidi: number | null = null
+    for (let i = 0; i < tmplInView.length; i++) {
+      const p = tmplInView[i]
+      const midi = freqToMidi(p.freq)
+      if (midi < minMidi || midi > maxMidi) { if (curSeg && curSeg.length >= 2) tmplSegs.push(curSeg); curSeg = null; prevTMidi = null; continue }
+      const pt = { x: timeToX(p.time), y: getMidiY(midi) }
+      if (prevTMidi === null) {
+        curSeg = [pt]
+      } else {
+        const timeDiff = p.time - tmplInView[i - 1].time
+        const midiDiff = Math.abs(midi - prevTMidi)
+        if (timeDiff < LINE_TIME_GAP && midiDiff < LINE_SEMITONE_GAP) {
+          curSeg!.push(pt)
+        } else {
+          if (curSeg && curSeg.length >= 2) tmplSegs.push(curSeg)
+          curSeg = [pt]
+        }
+      }
+      prevTMidi = midi
+    }
+    if (curSeg && curSeg.length >= 2) tmplSegs.push(curSeg)
+    console.log('[tmpl]', startTime.toFixed(1), endTime.toFixed(1), 'segs=' + tmplSegs.length, tmplSegs.map(s => s.length))
+    for (const pts of tmplSegs) {
+      const n = pts.length
+      let d = `M ${pts[0].x} ${pts[0].y}`
+      for (let i = 0; i < n - 1; i++) {
+        const p0 = pts[Math.max(i - 1, 0)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(i + 2, n - 1)]
+        const cp1x = p1.x + (p2.x - p0.x) / 6, cp1y = p1.y + (p2.y - p0.y) / 6
+        const cp2x = p2.x - (p3.x - p1.x) / 6, cp2y = p2.y - (p3.y - p1.y) / 6
+        d += ` C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x} ${p2.y}`
+      }
+      templateSegmentPaths.push(d)
+    }
+  }
+
   const segmentPaths = segments.map(seg => {
     const pts = seg.points
     if (pts.length < 2) return `M ${pts[0].x} ${pts[0].y}`
@@ -212,6 +260,12 @@ export const PitchCanvas = memo(function PitchCanvas({
         ))}
 
         <G clipPath="url(#chartClip)">
+          {templateSegmentPaths.map((path, i) => (
+            <Path key={`tmpl-${i}`}
+              d={path} fill="none" stroke="#FF9500" strokeWidth={2.5} opacity={0.4}
+              strokeLinecap="round" strokeLinejoin="round" />
+          ))}
+
           {dots.map((d, i) => (
             <Circle key={`dot-${i}`} cx={d.x} cy={d.y} r={1.5} fill="rgba(0,122,255,0.5)" />
           ))}

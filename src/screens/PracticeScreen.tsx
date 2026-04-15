@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Alert, Linking } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Alert, Linking, Modal } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Ionicons from 'react-native-vector-icons/Ionicons'
 import RNFS from 'react-native-fs'
@@ -8,7 +8,9 @@ import { Piano } from '../components/Piano'
 import { audioService } from '../services/audio'
 import { audioPlayer } from '../utils/audioUtils'
 import { loadUserSettings, saveUserSettings, saveRecordings, savePitchData, getRecordingPath, getPitchDataPath, loadRecordings } from '../services/storage'
-import { UserSettings, AppMode, RecordingState, Recording } from '../types'
+import { loadTemplates, loadTemplatePitchData } from '../services/templateStorage'
+import { UserSettings, AppMode, RecordingState, Recording, PitchTemplate, PitchDataPoint } from '../types'
+import { freqToMidi, midiToNoteName, noteNameToMidi } from '../utils/noteUtils'
 import { PRESET_MODES, CONFIG } from '../config/constants'
 import { useTheme } from '../context/ThemeContext'
 
@@ -33,6 +35,12 @@ export function PracticeScreen({ navigation }: any) {
 
   const [pianoExpanded, setPianoExpanded] = useState(true)
   const [chartAreaHeight, setChartAreaHeight] = useState(SCREEN_HEIGHT * 5 / 12)
+
+  // 模板相关
+  const [templates, setTemplates] = useState<PitchTemplate[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<PitchTemplate | null>(null)
+  const [templatePitchData, setTemplatePitchData] = useState<PitchDataPoint[]>([])
+  const [templateModalVisible, setTemplateModalVisible] = useState(false)
 
   const recordingTimerRef = useRef<any>(null)
   const lastTapTimeRef = useRef<number>(0)
@@ -63,12 +71,58 @@ export function PracticeScreen({ navigation }: any) {
       setPitchDetectionRate(settings.pitchDetectionRate)
     }
     loadData()
-    const unsubscribeFocus = navigation.addListener('focus', loadData)
+    const unsubscribeFocus = navigation.addListener('focus', async () => {
+      loadData()
+      // 检查已选模板是否仍存在
+      const list = await loadTemplates()
+      setTemplates(list)
+      if (selectedTemplate) {
+        const still = list.find(t => t.id === selectedTemplate.id)
+        if (!still) { setSelectedTemplate(null); setTemplatePitchData([]) }
+      }
+    })
     const unsubscribeBlur = navigation.addListener('blur', () => {
       if (recordingState === 'recording') pauseRecording()
     })
     return () => { unsubscribeFocus(); unsubscribeBlur() }
-  }, [navigation, recordingState])
+  }, [navigation, recordingState, selectedTemplate])
+
+  const openTemplateModal = async () => {
+    const list = await loadTemplates()
+    setTemplates(list)
+    setTemplateModalVisible(true)
+  }
+
+  const selectTemplate = async (template: PitchTemplate | null) => {
+    setTemplateModalVisible(false)
+    if (!template) { setSelectedTemplate(null); setTemplatePitchData([]); return }
+
+    // 检查模板音高范围是否超出当前练习模式
+    if (template.minNote && template.maxNote) {
+      const allModes = [...PRESET_MODES, ...customModes]
+      const mode = allModes.find(m => m.id === currentModeId) || PRESET_MODES[0]
+      const modeMidi = { min: noteNameToMidi(mode.startNote), max: noteNameToMidi(mode.endNote) }
+      const tmplMidi = { min: noteNameToMidi(template.minNote), max: noteNameToMidi(template.maxNote) }
+      const outOfRange = tmplMidi.min < modeMidi.min || tmplMidi.max > modeMidi.max
+      if (outOfRange) {
+        const confirmed = await new Promise<boolean>(resolve => {
+          Alert.alert(
+            '音域范围不完全匹配',
+            `模板音高范围（${template.minNote}–${template.maxNote}）超出当前练习范围（${mode.startNote}–${mode.endNote}），超出部分将不展示。\n\n是否继续使用此模板？`,
+            [
+              { text: '取消', style: 'cancel', onPress: () => resolve(false) },
+              { text: '继续', onPress: () => resolve(true) },
+            ]
+          )
+        })
+        if (!confirmed) return
+      }
+    }
+
+    setSelectedTemplate(template)
+    const loaded = await loadTemplatePitchData(template.pitchDataKey)
+    setTemplatePitchData(loaded?.data ?? [])
+  }
 
   // 双击处理（音域区或钢琴区域）
   const handleDoubleTap = () => {
@@ -292,10 +346,16 @@ export function PracticeScreen({ navigation }: any) {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       {/* 标题 */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <View style={{ width: 60 }} />
         <View style={styles.titleWithIcon}>
           <Ionicons name="musical-notes" size={24} color="#9B59B6" style={styles.titleIcon} />
           <Text style={[styles.title, { color: colors.text }]}>实时音准练习</Text>
         </View>
+        <TouchableOpacity onPress={openTemplateModal}>
+          <Text style={[styles.templateButtonText, { color: selectedTemplate ? '#FF9500' : '#007AFF' }]} numberOfLines={1}>
+            {selectedTemplate ? selectedTemplate.name.slice(0, 4) : '无模板'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* 中间内容区域 - 音高图/钢琴提示 + 控制按钮 */}
@@ -306,6 +366,7 @@ export function PracticeScreen({ navigation }: any) {
             <PitchChart
               key={`${currentMode.startNote}-${currentMode.endNote}`}
               data={pitchData}
+              templateData={templatePitchData.length > 0 ? templatePitchData : undefined}
               minNote={currentMode.startNote}
               maxNote={currentMode.endNote}
               duration={CONFIG.DEFAULT_CHART_DURATION}
@@ -409,6 +470,38 @@ export function PracticeScreen({ navigation }: any) {
           )}
         </View>
       </View>
+      {/* 模板选择 Modal */}
+      <Modal visible={templateModalVisible} animationType="slide" transparent onRequestClose={() => setTemplateModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setTemplateModalVisible(false)}>
+          <View style={[styles.modalSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+            <Text style={[styles.modalSheetTitle, { color: colors.text }]}>选择模板</Text>
+            {templates.length === 0 ? (
+              <View style={styles.modalEmpty}>
+                <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>暂无模板，请先到「模板」页导入</Text>
+                <TouchableOpacity onPress={() => { setTemplateModalVisible(false); navigation.navigate('Templates') }}>
+                  <Text style={{ color: '#007AFF', fontSize: 15 }}>前往模板页 →</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <ScrollView>
+                <TouchableOpacity style={[styles.modalItem, { borderBottomColor: colors.border }]} onPress={() => selectTemplate(null)}>
+                  <Text style={[styles.modalItemText, { color: selectedTemplate ? colors.text : '#007AFF' }]}>不使用模板</Text>
+                  {!selectedTemplate && <Ionicons name="checkmark" size={20} color="#007AFF" />}
+                </TouchableOpacity>
+                {templates.map(t => (
+                  <TouchableOpacity key={t.id} style={[styles.modalItem, { borderBottomColor: colors.border }]} onPress={() => selectTemplate(t)}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.modalItemText, { color: selectedTemplate?.id === t.id ? '#FF9500' : colors.text }]}>♪ {t.name}</Text>
+                      <Text style={{ fontSize: 12, color: colors.textSecondary }}>{t.sourceFileName}</Text>
+                    </View>
+                    {selectedTemplate?.id === t.id && <Ionicons name="checkmark" size={20} color="#FF9500" />}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -419,11 +512,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff'
   },
   header: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    alignItems: 'center'
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee',
   },
+  templateButtonText: { fontSize: 16, width: 60, textAlign: 'right' },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' },
+  modalSheet: {
+    borderTopLeftRadius: 16, borderTopRightRadius: 16,
+    borderTopWidth: 1, paddingTop: 16, maxHeight: '60%',
+  },
+  modalSheetTitle: { fontSize: 17, fontWeight: '600', textAlign: 'center', marginBottom: 12 },
+  modalEmpty: { padding: 24, alignItems: 'center' },
+  modalItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1,
+  },
+  modalItemText: { fontSize: 16, fontWeight: '500' },
   titleWithIcon: {
     flexDirection: 'row',
     alignItems: 'center'

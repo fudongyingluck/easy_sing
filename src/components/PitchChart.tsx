@@ -10,6 +10,7 @@ export type { NoteDisplay }
 
 interface PitchChartProps {
   data: PitchDataPoint[]
+  templateData?: PitchDataPoint[]
   minNote: string
   maxNote: string
   duration?: number
@@ -27,6 +28,7 @@ interface PitchChartProps {
 
 export function PitchChart({
   data,
+  templateData,
   minNote,
   maxNote,
   duration = CONFIG.DEFAULT_CHART_DURATION,
@@ -176,6 +178,7 @@ export function PitchChart({
       >
         <PitchCanvas
           data={data}
+          templateData={templateData}
           startTime={startTime}
           endTime={endTime}
           minMidi={minMidi}

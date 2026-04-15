@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActionSheetIOS, ActivityIndicator, Modal } from 'react-native'
+import React, { useState, useEffect, useRef } from 'react'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActionSheetIOS, ActivityIndicator, Modal, PanResponder } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import RNFS from 'react-native-fs'
 import Ionicons from 'react-native-vector-icons/Ionicons'
 import { PitchTemplate, PitchData, PitchDataPoint } from '../types'
 import { loadTemplates, addTemplate, deleteTemplate, saveTemplatePitchData, updateTemplate, loadTemplatePitchData } from '../services/templateStorage'
 import { pickAudioFile, copyAudioFileToImports, getAudioDuration } from '../services/documentPicker'
 import { nativePitchRecorder } from '../services/nativePitchRecorder'
+import { audioService } from '../services/audio'
 import { freqToMidi, midiToNoteName } from '../utils/noteUtils'
 import { useTheme } from '../context/ThemeContext'
 import { PlaybackPitchChart } from '../components/PlaybackPitchChart'
@@ -20,10 +22,49 @@ export function TemplatesScreen({ navigation }: any) {
   const [importStatus, setImportStatus] = useState('')
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  // 播放器状态
   const [viewingTemplate, setViewingTemplate] = useState<PitchTemplate | null>(null)
   const [viewingPitchData, setViewingPitchData] = useState<PitchDataPoint[]>([])
   const [viewingNoteRange, setViewingNoteRange] = useState({ minNote: 'C3', maxNote: 'C6' })
   const [pitchLoading, setPitchLoading] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [chartAreaHeight, setChartAreaHeight] = useState(0)
+
+  // seek 进度条 refs
+  const isPlayingRef = useRef(isPlaying)
+  const viewingTemplateRef = useRef(viewingTemplate)
+  const trackWidthRef = useRef(0)
+  const seekStartXRef = useRef(0)
+  useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
+  useEffect(() => { viewingTemplateRef.current = viewingTemplate }, [viewingTemplate])
+
+  const seekPanResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => !isPlayingRef.current,
+    onMoveShouldSetPanResponder: () => !isPlayingRef.current,
+    onPanResponderGrant: (e) => {
+      if (trackWidthRef.current <= 0) return
+      seekStartXRef.current = e.nativeEvent.locationX
+      const ratio = Math.max(0, Math.min(1, e.nativeEvent.locationX / trackWidthRef.current))
+      const t = ratio * (viewingTemplateRef.current?.duration ?? 0)
+      setCurrentTime(t)
+      audioService.seekTo(t)
+    },
+    onPanResponderMove: (_, { dx }) => {
+      if (trackWidthRef.current <= 0) return
+      const x = seekStartXRef.current + dx
+      const ratio = Math.max(0, Math.min(1, x / trackWidthRef.current))
+      const t = ratio * (viewingTemplateRef.current?.duration ?? 0)
+      setCurrentTime(t)
+      audioService.seekTo(t)
+    },
+  })).current
+
+  // 卸载时停止播放
+  useEffect(() => {
+    return () => { audioService.stopPlayback() }
+  }, [])
 
   const loadList = async () => {
     const list = await loadTemplates()
@@ -130,7 +171,6 @@ export function TemplatesScreen({ navigation }: any) {
       const result = await nativePitchRecorder.analyzeAudioFile(destPath)
       const pitchData: PitchData = {
         version: 1,
-        sampleRate: 10,
         duration: result.duration,
         data: result.points.map(p => ({
           time: p.time,
@@ -139,7 +179,10 @@ export function TemplatesScreen({ navigation }: any) {
         })),
       }
       const pitchDataKey = await saveTemplatePitchData(templateId, pitchData)
-      await updateTemplate({ ...template, pitchDataKey })
+      const validMidis = pitchData.data.filter(p => p.freq > 0).map(p => freqToMidi(p.freq))
+      const minNote = validMidis.length > 0 ? midiToNoteName(Math.max(21, Math.round(Math.min(...validMidis)) - 3)) : undefined
+      const maxNote = validMidis.length > 0 ? midiToNoteName(Math.min(108, Math.round(Math.max(...validMidis)) + 3)) : undefined
+      await updateTemplate({ ...template, pitchDataKey, minNote, maxNote })
       await loadList()
     } catch (error: any) {
       Alert.alert('导入失败', error?.message ?? String(error))
@@ -189,9 +232,13 @@ export function TemplatesScreen({ navigation }: any) {
   }
 
   const openTemplateViewer = async (template: PitchTemplate) => {
+    audioService.stopPlayback()
     setViewingTemplate(template)
     setViewingPitchData([])
     setViewingNoteRange({ minNote: 'C3', maxNote: 'C6' })
+    setIsPlaying(false)
+    setCurrentTime(0)
+    setChartAreaHeight(0)
     setPitchLoading(true)
     try {
       const loaded = await loadTemplatePitchData(template.pitchDataKey)
@@ -206,6 +253,40 @@ export function TemplatesScreen({ navigation }: any) {
       }
     } finally {
       setPitchLoading(false)
+    }
+  }
+
+  const closeViewer = () => {
+    audioService.stopPlayback()
+    setViewingTemplate(null)
+    setIsPlaying(false)
+    setCurrentTime(0)
+    setViewingPitchData([])
+  }
+
+  const startAudio = async (template: PitchTemplate) => {
+    setIsPlaying(true)
+    try {
+      const fullPath = `${RNFS.DocumentDirectoryPath}/PitchPerfect/Imports/${template.audioFilePath}`
+      await audioService.playAudio(fullPath, (time) => setCurrentTime(time))
+    } catch (error: any) {
+      Alert.alert('播放失败', error?.message ?? String(error))
+    } finally {
+      setIsPlaying(false)
+      setCurrentTime(0)
+    }
+  }
+
+  const togglePlayPause = async () => {
+    if (isPlaying) {
+      audioService.pausePlayback()
+      setIsPlaying(false)
+    } else if (audioService.hasPlayback()) {
+      setIsPlaying(true)
+      audioService.resumePlayback((time) => setCurrentTime(time))
+    } else if (viewingTemplate) {
+      setCurrentTime(0)
+      await startAudio(viewingTemplate)
     }
   }
 
@@ -308,7 +389,7 @@ export function TemplatesScreen({ navigation }: any) {
         </View>
       )}
 
-      {/* FAB：非选择模式 + 非导入中时显示 */}
+      {/* FAB：非选择模式时显示 */}
       {!isSelectionMode && (
         <TouchableOpacity
           style={[styles.fab, { bottom: insets.bottom + 24 }]}
@@ -323,24 +404,28 @@ export function TemplatesScreen({ navigation }: any) {
         </TouchableOpacity>
       )}
 
-      {/* 模板音高曲线查看 Modal */}
+      {/* 模板播放 Modal */}
       <Modal
         visible={viewingTemplate !== null}
         animationType="slide"
         statusBarTranslucent
-        onRequestClose={() => setViewingTemplate(null)}
+        onRequestClose={closeViewer}
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => setViewingTemplate(null)}>
-              <Ionicons name="chevron-down" size={28} color={colors.text} />
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]} numberOfLines={1}>
-              {viewingTemplate?.name}
+        <View style={[styles.playerContainer, { backgroundColor: colors.background }]}>
+          {/* 顶栏 */}
+          <View style={[styles.playerHeader, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
+            <View style={{ width: 64 }} />
+            <Text style={[styles.playerTitle, { color: colors.text }]} numberOfLines={1}>
+              {viewingTemplate?.name ?? ''}
             </Text>
-            <View style={{ width: 28 }} />
+            <TouchableOpacity style={styles.closeButton} onPress={closeViewer}>
+              <Text style={[styles.closeLabel, { color: colors.textSecondary }]}>收起</Text>
+              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
-          <View style={styles.modalChart}>
+
+          {/* 音高曲线区域 */}
+          <View style={{ flex: 1 }} onLayout={(e) => setChartAreaHeight(e.nativeEvent.layout.height)}>
             {pitchLoading ? (
               <View style={styles.chartPlaceholder}>
                 <ActivityIndicator size="large" color="#007AFF" />
@@ -351,18 +436,47 @@ export function TemplatesScreen({ navigation }: any) {
                 <Ionicons name="analytics-outline" size={48} color={colors.textSecondary} />
                 <Text style={{ color: colors.textSecondary, marginTop: 12 }}>暂无音高数据</Text>
               </View>
-            ) : (
+            ) : chartAreaHeight > 0 ? (
               <PlaybackPitchChart
                 data={viewingPitchData}
                 minNote={viewingNoteRange.minNote}
                 maxNote={viewingNoteRange.maxNote}
                 totalDuration={viewingTemplate?.duration ?? 0}
-                currentTime={0}
-                isPlaying={false}
+                currentTime={currentTime}
+                isPlaying={isPlaying}
+                height={chartAreaHeight}
+                onSeek={(t) => { setCurrentTime(t); audioService.seekTo(t) }}
               />
-            )}
+            ) : null}
           </View>
-        </SafeAreaView>
+
+          {/* 底部播放控件 */}
+          <View style={[styles.playerControls, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background, borderTopColor: colors.border }]}>
+            <View style={styles.progressRow}>
+              <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatDuration(Math.floor(currentTime))}</Text>
+              {(() => {
+                const fillPercent = Math.min(100, (currentTime / Math.max(1, viewingTemplate?.duration ?? 1)) * 100)
+                const thumbLeft = trackWidthRef.current > 0 ? (fillPercent / 100) * trackWidthRef.current - 7 : -7
+                return (
+                  <View
+                    style={styles.progressTrackWrapper}
+                    onLayout={e => { trackWidthRef.current = e.nativeEvent.layout.width }}
+                    {...seekPanResponder.panHandlers}
+                  >
+                    <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+                      <View style={[styles.progressFill, { width: `${fillPercent}%` }]} />
+                    </View>
+                    <View style={[styles.progressThumb, { left: thumbLeft }]} />
+                  </View>
+                )
+              })()}
+              <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatDuration(viewingTemplate?.duration ?? 0)}</Text>
+            </View>
+            <TouchableOpacity style={styles.playPauseButton} onPress={togglePlayPause}>
+              <Ionicons name={isPlaying ? 'pause' : 'play'} size={32} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   )
@@ -415,12 +529,32 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
   },
-  modalContainer: { flex: 1 },
-  modalHeader: {
+  // 播放器 Modal
+  playerContainer: { flex: 1 },
+  playerHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1,
+    paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1,
   },
-  modalTitle: { fontSize: 17, fontWeight: '600', flex: 1, textAlign: 'center', marginHorizontal: 8 },
-  modalChart: { flex: 1 },
+  playerTitle: { fontSize: 17, fontWeight: '600', flex: 1, textAlign: 'center' },
+  closeButton: { flexDirection: 'row', alignItems: 'center', width: 64, justifyContent: 'flex-end' },
+  closeLabel: { fontSize: 15, marginRight: 2 },
   chartPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  playerControls: {
+    paddingTop: 12, paddingHorizontal: 20, borderTopWidth: 1, alignItems: 'center',
+  },
+  progressRow: {
+    flexDirection: 'row', alignItems: 'center', width: '100%', marginBottom: 16,
+  },
+  timeText: { fontSize: 13, width: 40, textAlign: 'center' },
+  progressTrackWrapper: { flex: 1, height: 30, justifyContent: 'center', marginHorizontal: 4 },
+  progressTrack: { height: 4, borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: '#007AFF', borderRadius: 2 },
+  progressThumb: {
+    position: 'absolute', top: '50%', marginTop: -7,
+    width: 14, height: 14, borderRadius: 7, backgroundColor: '#007AFF',
+  },
+  playPauseButton: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center',
+  },
 })
