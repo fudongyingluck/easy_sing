@@ -127,7 +127,7 @@ export function PitchChart({
   // - 非 seekable（录音中）：跟随 max(currentTime, dataLatestTime)，保证新数据始终可见
   const dataLatestTime = data.length > 0 ? data[data.length - 1].time : 0
   const now = (seekable && paused)
-    ? Math.max(duration, Math.max(currentTime ?? 0, dataLatestTime) - timeOffset)
+    ? Math.max(duration, dataLatestTime - timeOffset)
     : seekable
       ? Math.max(duration, currentTime ?? 0)
       : Math.max(duration, Math.max(currentTime ?? 0, dataLatestTime))
