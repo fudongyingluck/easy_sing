@@ -1,9 +1,9 @@
 import { PitchData, PitchDataPoint } from '../types'
-import { CONFIG } from '../config/constants'
 import { midiToNoteName } from '../utils/noteUtils'
 import { nativePitchRecorder } from './nativePitchRecorder'
 import { audioPlayer } from '../utils/audioUtils'
 import { NativeModules } from 'react-native'
+import { CONFIG } from '../config/constants'
 
 const DEFAULT_MAX_DURATION = CONFIG.MAX_RECORDING_DURATION
 
@@ -108,7 +108,6 @@ export class AudioService {
       duration: Math.round(duration),
       pitchData: {
         version: 1,
-        sampleRate: CONFIG.PITCH_DATA_SAMPLE_RATE,
         duration: Math.round(duration),
         data: this.pitchData
       }
@@ -162,9 +161,10 @@ export class AudioService {
     audioPlayer.release()  // 释放所有钢琴 Sound 对象，防止 session 重激活时 iOS 自动恢复
     NativeModules.AudioSessionModule?.resetForPlayback?.()
 
-    // 按文件名查找：Documents 优先，兼容旧 Caches 路径，兼容重装后 UUID 变化
-    const filename = filePath.split('/').pop() ?? filePath
-    const resolvedPath = filename ? await nativePitchRecorder.resolveRecordingPath(filename) : filePath
+    // 绝对路径直接使用（如模板 Imports/ 目录）；文件名走 resolveRecordingPath 兼容旧路径
+    const resolvedPath = filePath.startsWith('/')
+      ? filePath
+      : await nativePitchRecorder.resolveRecordingPath(filePath)
     console.log('[playAudio] stored:', filePath)
     console.log('[playAudio] resolved:', resolvedPath)
 
