@@ -249,7 +249,7 @@ export const PitchCanvas = memo(function PitchCanvas({
         <G clipPath={`url(#${clipId})`}>
           <Path
             d={templateSegmentPaths.join(' ') || 'M 0 0'}
-            fill="none" stroke="#FF9500" strokeWidth={2.5} opacity={0.4}
+            fill="none" stroke="#FF9500" strokeWidth={2.5} opacity={0.25}
             strokeLinecap="round" strokeLinejoin="round" />
 
           {dots.map((d, i) => (
