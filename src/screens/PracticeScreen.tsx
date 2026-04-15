@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Alert, Linking, Modal } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Alert, Linking, Modal, NativeModules } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Ionicons from 'react-native-vector-icons/Ionicons'
 import RNFS from 'react-native-fs'
@@ -44,6 +44,7 @@ export function PracticeScreen({ navigation }: any) {
 
   const recordingTimerRef = useRef<any>(null)
   const lastTapTimeRef = useRef<number>(0)
+  const templateSoundRef = useRef<any>(null)
 
   // 组件卸载时清理 timer 和 audioService 回调，防止内存泄漏
   useEffect(() => {
@@ -55,6 +56,11 @@ export function PracticeScreen({ navigation }: any) {
       audioService.setOnPitchDataUpdate(null)
       audioService.setOnMaxDurationReached(null)
       audioService.stopPlayback()
+      if (templateSoundRef.current) {
+        templateSoundRef.current.stop()
+        templateSoundRef.current.release()
+        templateSoundRef.current = null
+      }
     }
   }, [])
 
@@ -124,6 +130,44 @@ export function PracticeScreen({ navigation }: any) {
     setTemplatePitchData(loaded?.data ?? [])
   }
 
+  // 停止并释放模板音频
+  const stopTemplateSound = () => {
+    if (templateSoundRef.current) {
+      templateSoundRef.current.stop()
+      templateSoundRef.current.release()
+      templateSoundRef.current = null
+    }
+  }
+
+  // 获取模板音频的完整路径
+  const resolveTemplateAudioPath = (template: PitchTemplate): string => {
+    if (template.audioFilePath.startsWith('/')) return template.audioFilePath
+    return `${RNFS.DocumentDirectoryPath}/PitchPerfect/Imports/${template.audioFilePath}`
+  }
+
+  // 开始播放模板音频（在录音开始后调用）
+  const startTemplateAudio = (template: PitchTemplate) => {
+    stopTemplateSound()
+    const path = resolveTemplateAudioPath(template)
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const SoundModule = require('react-native-sound')
+    const Sound = SoundModule.default ?? SoundModule
+    const sound = new Sound(path, '', (error: any) => {
+      if (error || templateSoundRef.current !== sound) {
+        sound.release()
+        return
+      }
+      sound.play(() => {
+        // 播完后静默释放，不影响录音
+        if (templateSoundRef.current === sound) {
+          sound.release()
+          templateSoundRef.current = null
+        }
+      })
+    })
+    templateSoundRef.current = sound
+  }
+
   // 双击处理（音域区或钢琴区域）
   const handleDoubleTap = () => {
     const currentTime = Date.now()
@@ -168,6 +212,25 @@ export function PracticeScreen({ navigation }: any) {
   const startRecording = async () => {
     try {
       console.log('[Button] 开始录音')
+
+      // 有模板时检查耳机，避免模板音频被麦克风拾入录音
+      if (selectedTemplate) {
+        const connected: boolean = await NativeModules.AudioSessionModule?.isHeadphonesConnected?.() ?? false
+        if (!connected) {
+          const proceed = await new Promise<boolean>(resolve => {
+            Alert.alert(
+              '未检测到耳机',
+              '建议佩戴耳机，避免模板音频被麦克风拾入录音。是否继续？',
+              [
+                { text: '取消', style: 'cancel', onPress: () => resolve(false) },
+                { text: '继续', onPress: () => resolve(true) },
+              ]
+            )
+          })
+          if (!proceed) return
+        }
+      }
+
       setPitchData([])
 
       // 设置音高数据更新回调
@@ -185,6 +248,7 @@ export function PracticeScreen({ navigation }: any) {
         setReachedDurationLimit(true)
         setRecordingState('paused')
         audioService.pauseRecording().catch(console.error)
+        if (templateSoundRef.current) templateSoundRef.current.pause()
       })
 
       const id = await audioService.startRecording(recordingDurationLimit, pitchDetectionRate)
@@ -196,6 +260,9 @@ export function PracticeScreen({ navigation }: any) {
       recordingTimerRef.current = setInterval(() => {
         setRecordingTime(audioService.getRecordingElapsed())
       }, 100)
+
+      // 开始同步播放模板音频
+      if (selectedTemplate) startTemplateAudio(selectedTemplate)
     } catch (error: any) {
       if (error?.code === 'permission_denied_settings') {
         Alert.alert(
@@ -223,6 +290,7 @@ export function PracticeScreen({ navigation }: any) {
       }
       await audioService.pauseRecording()
       setRecordingState('paused')
+      if (templateSoundRef.current) templateSoundRef.current.pause()
     } catch (error) {
       console.error('Failed to pause recording:', error)
     }
@@ -239,6 +307,16 @@ export function PracticeScreen({ navigation }: any) {
       recordingTimerRef.current = setInterval(() => {
         setRecordingTime(audioService.getRecordingElapsed())
       }, 100)
+
+      // 继续播放模板音频（从暂停位置恢复）
+      if (templateSoundRef.current) {
+        templateSoundRef.current.play(() => {
+          if (templateSoundRef.current) {
+            templateSoundRef.current.release()
+            templateSoundRef.current = null
+          }
+        })
+      }
     } catch (error) {
       console.error('Failed to resume recording:', error)
     }
@@ -252,6 +330,7 @@ export function PracticeScreen({ navigation }: any) {
         recordingTimerRef.current = null
       }
 
+      stopTemplateSound()
       audioService.stopPlayback()
       audioService.setOnPitchDataUpdate(null)
       audioService.setOnMaxDurationReached(null)
@@ -300,6 +379,7 @@ export function PracticeScreen({ navigation }: any) {
         recordingTimerRef.current = null
       }
 
+      stopTemplateSound()
       audioService.stopPlayback()
 
       audioService.setOnPitchDataUpdate(null)

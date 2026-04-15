@@ -54,9 +54,9 @@
 ### F6：录音时同步播放模板音频
 可测效果：选好模板 → 开始录音 → 同时能听到模板音频播放（建议戴耳机测试）
 
-- [ ] Native `isHeadphonesConnected` 方法
-- [ ] 无耳机弹提示
-- [ ] 录音开始/暂停/继续/停止时同步控制模板音频播放
+- [x] Native `isHeadphonesConnected` 方法
+- [x] 无耳机弹提示
+- [x] 录音开始/暂停/继续/停止时同步控制模板音频播放
 
 ### F7：从录音历史创建模板
 可测效果：「＋」→「从录音历史选择」→ 选一条录音 → 立即生成模板（无需分析）
@@ -178,14 +178,14 @@
   - [x] 练习页 `focus` 时检查已选模板是否仍存在，若已被删除则自动清空，按钮恢复「无模板」
 
 ### 4.4 模板音频同步播放
-- [ ] `src/screens/PracticeScreen.tsx`
-  - [ ] 开始录音前检测耳机状态（读 `AVAudioSession.currentRoute.outputs`，通过 Native 方法暴露）
-  - [ ] 无耳机时弹提示，用户确认后继续
-  - [ ] 开始录音时同步播放模板音频（使用 `react-native-sound`，从头播放）
-  - [ ] 暂停 / 继续 / 停止录音时同步控制模板音频
-  - [ ] 模板音频播完后静默结束，不影响录音
-- [ ] `AudioSessionModule.swift`：新增 `isHeadphonesConnected()` 方法，返回当前是否有耳机/蓝牙音频输出
-- [ ] `AudioSessionModule.m`：暴露 `isHeadphonesConnected`
+- [x] `src/screens/PracticeScreen.tsx`
+  - [x] 开始录音前检测耳机状态（读 `AVAudioSession.currentRoute.outputs`，通过 Native 方法暴露）
+  - [x] 无耳机时弹提示，用户确认后继续
+  - [x] 开始录音时同步播放模板音频（使用 `react-native-sound`，从头播放）
+  - [x] 暂停 / 继续 / 停止录音时同步控制模板音频
+  - [x] 模板音频播完后静默结束，不影响录音
+- [x] `AudioSessionModule.swift`：新增 `isHeadphonesConnected()` 方法，返回当前是否有耳机/蓝牙音频输出
+- [x] `AudioSessionModule.m`：暴露 `isHeadphonesConnected`
 
 ---
 
