@@ -353,7 +353,7 @@ export function PracticeScreen({ navigation }: any) {
         </View>
         <TouchableOpacity onPress={openTemplateModal} disabled={recordingState !== 'idle'}>
           <Text style={[styles.templateButtonText, { color: recordingState !== 'idle' ? colors.textSecondary : selectedTemplate ? '#FF9500' : '#007AFF' }]} numberOfLines={1}>
-            {selectedTemplate ? selectedTemplate.name.slice(0, 4) : '无模板'}
+            {selectedTemplate ? (selectedTemplate.name.length > 4 ? selectedTemplate.name.slice(0, 4) + '…' : selectedTemplate.name) : '无模板'}
           </Text>
         </TouchableOpacity>
       </View>

@@ -39,17 +39,17 @@
 ### F4：模板播放（和录音列表一样）
 可测效果：点击模板条目 → 进入播放页 → 能播放音频 + 查看音高曲线（复用录音播放页逻辑）
 
-- [ ] `PitchCanvas` 新增 `templateData` prop（渲染橙色半透明曲线）
-- [ ] `PitchChart` 透传 `templateData`
+- [x] `PitchCanvas` 新增 `templateData` prop（渲染橙色半透明曲线）
+- [x] `PitchChart` 透传 `templateData`
 - [x] 模板点击进入播放页
 
 ### F5：练习页选模板 + 曲线叠加
 可测效果：练习页 Header 有「无模板」按钮 → 选一个模板 → 录音时背景出现橙色参考曲线
 
-- [ ] 练习页 Header 模板选择按钮
-- [ ] 模板选择 Modal（有/无模板两种状态）
-- [ ] 加载模板音高数据并传给 `PitchChart`
-- [ ] 页面 focus 时检查模板是否仍存在
+- [x] 练习页 Header 模板选择按钮
+- [x] 模板选择 Modal（有/无模板两种状态）
+- [x] 加载模板音高数据并传给 `PitchChart`
+- [x] 页面 focus 时检查模板是否仍存在
 
 ### F6：录音时同步播放模板音频
 可测效果：选好模板 → 开始录音 → 同时能听到模板音频播放（建议戴耳机测试）
@@ -128,13 +128,13 @@
 ## 三、组件层
 
 ### 3.1 PitchCanvas
-- [ ] `src/components/PitchCanvas.tsx`
-  - [ ] 新增 `templateData?: PitchDataPoint[]` prop
-  - [ ] 在底层渲染模板曲线（橙色 `#FF9500`，opacity 0.25，同样用 Catmull-Rom 插值）
+- [x] `src/components/PitchCanvas.tsx`
+  - [x] 新增 `templateData?: PitchDataPoint[]` prop
+  - [x] 在底层渲染模板曲线（橙色 `#FF9500`，opacity 0.25，同样用 Catmull-Rom 插值）
 
 ### 3.2 PitchChart
-- [ ] `src/components/PitchChart.tsx`
-  - [ ] 新增 `templateData?: PitchDataPoint[]` prop，透传给 `PitchCanvas`
+- [x] `src/components/PitchChart.tsx`
+  - [x] 新增 `templateData?: PitchDataPoint[]` prop，透传给 `PitchCanvas`
 
 ---
 
@@ -168,14 +168,14 @@
 - [ ] `src/App.tsx`：新增第四个 Tab「模板」，图标 `musical-notes-outline`
 
 ### 4.3 练习页
-- [ ] `src/screens/PracticeScreen.tsx`
-  - [ ] Header 右侧新增文字按钮（无图标，样式同录音列表的「选择」）：未选中显示「无模板」，选中后显示模板名称前 4 个字符
-  - [ ] 点击始终弹出 Modal
-  - [ ] Modal 内容（有模板）：「不使用模板」选项 + 模板列表
-  - [ ] Modal 内容（无模板）：空状态提示文字 + 「前往模板页导入」按钮（关闭 Modal 并跳转模板 Tab）
-  - [ ] 选中后加载模板音高数据（`loadPitchData`）存入 state
-  - [ ] 将模板数据传给 `PitchChart` 的 `templateData` prop
-  - [ ] 练习页 `focus` 时检查已选模板是否仍存在，若已被删除则自动清空，按钮恢复「无模板」
+- [x] `src/screens/PracticeScreen.tsx`
+  - [x] Header 右侧新增文字按钮（无图标，样式同录音列表的「选择」）：未选中显示「无模板」，选中后显示模板名称前 4 个字符
+  - [x] 点击始终弹出 Modal
+  - [x] Modal 内容（有模板）：「不使用模板」选项 + 模板列表
+  - [x] Modal 内容（无模板）：空状态提示文字 + 「前往模板页导入」按钮（关闭 Modal 并跳转模板 Tab）
+  - [x] 选中后加载模板音高数据（`loadPitchData`）存入 state
+  - [x] 将模板数据传给 `PitchChart` 的 `templateData` prop
+  - [x] 练习页 `focus` 时检查已选模板是否仍存在，若已被删除则自动清空，按钮恢复「无模板」
 
 ### 4.4 模板音频同步播放
 - [ ] `src/screens/PracticeScreen.tsx`
