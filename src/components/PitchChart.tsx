@@ -188,7 +188,7 @@ export function PitchChart({
           leftDisplay={leftDisplay}
           rightDisplay={rightDisplay}
           showBothYAxes={showBothYAxes}
-          currentTimeLine={currentTime}
+          currentTimeLine={currentTime !== undefined ? Math.min(currentTime, endTime) : currentTime}
         />
       </ScrollView>
 
