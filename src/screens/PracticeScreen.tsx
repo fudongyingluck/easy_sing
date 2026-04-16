@@ -220,7 +220,7 @@ export function PracticeScreen({ navigation }: any) {
           const proceed = await new Promise<boolean>(resolve => {
             Alert.alert(
               '未检测到耳机',
-              '建议佩戴耳机，避免模板音频被麦克风拾入录音。是否继续？',
+              '建议佩戴耳机。模板音频外放会干扰麦克风，影响音高检测准确性。是否继续？',
               [
                 { text: '取消', style: 'cancel', onPress: () => resolve(false) },
                 { text: '继续', onPress: () => resolve(true) },

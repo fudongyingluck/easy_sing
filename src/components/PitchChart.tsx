@@ -190,7 +190,7 @@ export function PitchChart({
       <View
         testID="pitch-chart-overlay"
         style={[StyleSheet.absoluteFillObject, { bottom: X_AXIS_HEIGHT }]}
-        {...panResponder.panHandlers}
+        {...panResponder?.panHandlers}
       />
     </View>
   )
