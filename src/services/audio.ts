@@ -161,10 +161,10 @@ export class AudioService {
     audioPlayer.release()  // 释放所有钢琴 Sound 对象，防止 session 重激活时 iOS 自动恢复
     NativeModules.AudioSessionModule?.resetForPlayback?.()
 
-    // 绝对路径直接使用（如模板 Imports/ 目录）；文件名走 resolveRecordingPath 兼容旧路径
-    const resolvedPath = filePath.startsWith('/')
+    // 模板音频（含 /Imports/）直接使用绝对路径；录音文件提取文件名走 resolveRecordingPath 兼容沙盒路径变化
+    const resolvedPath = filePath.includes('/Imports/')
       ? filePath
-      : await nativePitchRecorder.resolveRecordingPath(filePath)
+      : await nativePitchRecorder.resolveRecordingPath(filePath.split('/').pop() ?? filePath)
     console.log('[playAudio] stored:', filePath)
     console.log('[playAudio] resolved:', resolvedPath)
 
