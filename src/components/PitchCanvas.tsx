@@ -256,11 +256,11 @@ export const PitchCanvas = memo(function PitchCanvas({
             <Circle key={`dot-${i}`} cx={d.x} cy={d.y} r={1.5} fill="rgba(0,122,255,0.5)" />
           ))}
 
-          {segmentPaths.map((path, i) => (
-            <Path key={`seg-${i}`}
-              d={path} fill="none" stroke={`url(#${gradientId})`} strokeWidth={2.5}
-              strokeLinecap="round" strokeLinejoin="round" />
-          ))}
+          {/* 同模板路径，合并为单个 Path 避免 react-native-svg 元素数量增加时的渲染缺失 bug */}
+          <Path
+            d={segmentPaths.join(' ') || 'M 0 0'}
+            fill="none" stroke={`url(#${gradientId})`} strokeWidth={2.5}
+            strokeLinecap="round" strokeLinejoin="round" />
 
           {currentTimeLine !== undefined
             && currentTimeLine >= startTime

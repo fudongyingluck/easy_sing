@@ -45,8 +45,8 @@ export function PitchChart({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const [initialScrollDone, setInitialScrollDone] = useState(false)
 
-  // seekTime：暂停后视口右边沿的绝对时间，默认跟 currentTime，拖动时直接改这个值
-  const [seekTime, setSeekTime] = useState(currentTime ?? 0)
+  // seekTime：暂停后视口右边沿的绝对时间，至少为 duration，确保视口不从 0 开始
+  const [seekTime, setSeekTime] = useState(() => Math.max(duration, currentTime ?? 0))
 
   const scrollViewRef = useRef<ScrollView>(null)
   const actualScrollY = useRef(0)
@@ -76,16 +76,10 @@ export function PitchChart({
     scrollViewRef.current?.scrollTo({ y, animated: false })
   }
 
-  // paused 状态切换时更新视口
+  // paused 状态切换时更新视口，至少为 duration 避免视口右边沿跳到 0
   // 用 useLayoutEffect 在绘制前同步修正 seekTime，避免闪烁
   useLayoutEffect(() => {
-    if (!paused) {
-      // 恢复录音：seekTime 回归 currentTime（由 now 计算接管，这里置为当前值即可）
-      updateSeekTime(currentTimeRef.current ?? 0)
-    } else {
-      // 暂停：把视口右边沿锁定在当前录音时刻
-      updateSeekTime(Math.max(durationRef.current, currentTimeRef.current ?? 0))
-    }
+    updateSeekTime(Math.max(durationRef.current, currentTimeRef.current ?? 0))
   }, [paused])
 
   const minMidi = noteNameToMidi(minNote)
