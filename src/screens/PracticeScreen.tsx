@@ -36,6 +36,8 @@ export function PracticeScreen({ navigation }: any) {
   const [pianoExpanded, setPianoExpanded] = useState(true)
   const [chartAreaHeight, setChartAreaHeight] = useState(SCREEN_HEIGHT * 5 / 12)
 
+  const [rememberLastTemplate, setRememberLastTemplate] = useState(false)
+
   // 模板相关
   const [templates, setTemplates] = useState<PitchTemplate[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<PitchTemplate | null>(null)
@@ -75,6 +77,7 @@ export function PracticeScreen({ navigation }: any) {
       setShowBothYAxes(settings.showBothYAxes)
       setRecordingDurationLimit(settings.recordingDurationLimit)
       setPitchDetectionRate(settings.pitchDetectionRate)
+      setRememberLastTemplate(settings.rememberLastTemplate)
     }
     loadData()
     const unsubscribeFocus = navigation.addListener('focus', async () => {
@@ -365,6 +368,10 @@ export function PracticeScreen({ navigation }: any) {
       setRecordingId(null)
       setRecordingTime(0)
       setPitchData([])
+      if (!rememberLastTemplate) {
+        setSelectedTemplate(null)
+        setTemplatePitchData([])
+      }
 
     } catch (error) {
       console.error('Failed to save recording:', error)

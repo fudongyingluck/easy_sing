@@ -50,6 +50,8 @@ export interface UserSettings {
   rightYAxisDisplay: 'english' | 'solfege' | 'number'
   showBothYAxes: boolean
   themeMode: 'light' | 'dark' | 'system'
+  // 模板
+  rememberLastTemplate: boolean
 }
 
 // 音高模板

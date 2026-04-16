@@ -600,6 +600,22 @@ export function SettingsScreen() {
           />
         </Section>
 
+        <Section title="模板">
+          <SettingRow
+            icon="musical-notes-outline" iconColor="#FF9500"
+            title="记住上次使用的模板"
+            rightNode={
+              <Switch
+                value={settings.rememberLastTemplate}
+                onValueChange={v => save({ ...settings, rememberLastTemplate: v })}
+                trackColor={{ false: '#C7C7CC', true: '#FF6B6B' }}
+                thumbColor="#fff"
+              />
+            }
+            isLast
+          />
+        </Section>
+
         <Section title="显示">
           <SettingRow
             icon="text-outline" iconColor="#007AFF"

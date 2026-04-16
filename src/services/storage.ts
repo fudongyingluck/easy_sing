@@ -20,6 +20,7 @@ const defaultSettings: UserSettings = {
   rightYAxisDisplay: 'english',
   showBothYAxes: true,
   themeMode: 'system',
+  rememberLastTemplate: false,
 }
 
 // 初始化存储
