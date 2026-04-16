@@ -8,7 +8,7 @@ import { Piano } from '../components/Piano'
 import { audioService } from '../services/audio'
 import { audioPlayer } from '../utils/audioUtils'
 import { loadUserSettings, saveUserSettings, saveRecordings, savePitchData, getRecordingPath, getPitchDataPath, loadRecordings } from '../services/storage'
-import { loadTemplates, loadTemplatePitchData } from '../services/templateStorage'
+import { loadTemplates, loadTemplatePitchData, resolveTemplateAudioPath } from '../services/templateStorage'
 import { UserSettings, AppMode, RecordingState, Recording, PitchTemplate, PitchDataPoint } from '../types'
 import { freqToMidi, midiToNoteName, noteNameToMidi } from '../utils/noteUtils'
 import { PRESET_MODES, CONFIG } from '../config/constants'
@@ -42,6 +42,7 @@ export function PracticeScreen({ navigation }: any) {
   const [templates, setTemplates] = useState<PitchTemplate[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<PitchTemplate | null>(null)
   const [templatePitchData, setTemplatePitchData] = useState<PitchDataPoint[]>([])
+  const [templateAudioPath, setTemplateAudioPath] = useState<string>('')
   const [templateModalVisible, setTemplateModalVisible] = useState(false)
 
   const recordingTimerRef = useRef<any>(null)
@@ -87,7 +88,7 @@ export function PracticeScreen({ navigation }: any) {
       setTemplates(list)
       if (selectedTemplate) {
         const still = list.find(t => t.id === selectedTemplate.id)
-        if (!still) { setSelectedTemplate(null); setTemplatePitchData([]) }
+        if (!still) { setSelectedTemplate(null); setTemplatePitchData([]); setTemplateAudioPath('') }
       }
     })
     const unsubscribeBlur = navigation.addListener('blur', () => {
@@ -104,7 +105,7 @@ export function PracticeScreen({ navigation }: any) {
 
   const selectTemplate = async (template: PitchTemplate | null) => {
     setTemplateModalVisible(false)
-    if (!template) { setSelectedTemplate(null); setTemplatePitchData([]); return }
+    if (!template) { setSelectedTemplate(null); setTemplatePitchData([]); setTemplateAudioPath(''); return }
 
     // 检查模板音高范围是否超出当前练习模式
     if (template.minNote && template.maxNote) {
@@ -131,6 +132,8 @@ export function PracticeScreen({ navigation }: any) {
     setSelectedTemplate(template)
     const loaded = await loadTemplatePitchData(template.pitchDataKey)
     setTemplatePitchData(loaded?.data ?? [])
+    const audioPath = await resolveTemplateAudioPath(template)
+    setTemplateAudioPath(audioPath)
   }
 
   // 停止并释放模板音频
@@ -142,16 +145,11 @@ export function PracticeScreen({ navigation }: any) {
     }
   }
 
-  // 获取模板音频的完整路径
-  const resolveTemplateAudioPath = (template: PitchTemplate): string => {
-    if (template.audioFilePath.startsWith('/')) return template.audioFilePath
-    return `${RNFS.DocumentDirectoryPath}/PitchPerfect/Imports/${template.audioFilePath}`
-  }
-
   // 开始播放模板音频（在录音开始后调用）
   const startTemplateAudio = (template: PitchTemplate) => {
     stopTemplateSound()
-    const path = resolveTemplateAudioPath(template)
+    const path = templateAudioPath
+    if (!path) return
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const SoundModule = require('react-native-sound')
     const Sound = SoundModule.default ?? SoundModule
@@ -371,6 +369,7 @@ export function PracticeScreen({ navigation }: any) {
       if (!rememberLastTemplate) {
         setSelectedTemplate(null)
         setTemplatePitchData([])
+        setTemplateAudioPath('')
       }
 
     } catch (error) {

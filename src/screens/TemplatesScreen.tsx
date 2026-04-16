@@ -3,9 +3,10 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActionShee
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import RNFS from 'react-native-fs'
 import Ionicons from 'react-native-vector-icons/Ionicons'
-import { PitchTemplate, PitchData, PitchDataPoint } from '../types'
-import { loadTemplates, addTemplate, deleteTemplate, saveTemplatePitchData, updateTemplate, loadTemplatePitchData } from '../services/templateStorage'
+import { PitchTemplate, PitchData, PitchDataPoint, Recording } from '../types'
+import { loadTemplates, addTemplate, deleteTemplate, saveTemplatePitchData, updateTemplate, loadTemplatePitchData, resolveTemplateAudioPath, createTemplateFromRecording } from '../services/templateStorage'
 import { pickAudioFile, copyAudioFileToImports, getAudioDuration } from '../services/documentPicker'
+import { loadRecordings } from '../services/storage'
 import { nativePitchRecorder } from '../services/nativePitchRecorder'
 import { audioService } from '../services/audio'
 import { freqToMidi, midiToNoteName } from '../utils/noteUtils'
@@ -14,7 +15,7 @@ import { PlaybackPitchChart } from '../components/PlaybackPitchChart'
 
 const MAX_DURATION = 600 // 10 分钟
 
-export function TemplatesScreen({ navigation }: any) {
+export function TemplatesScreen({ navigation, route }: any) {
   const { colors } = useTheme()
   const insets = useSafeAreaInsets()
   const [templates, setTemplates] = useState<PitchTemplate[]>([])
@@ -74,9 +75,22 @@ export function TemplatesScreen({ navigation }: any) {
   useEffect(() => { loadList() }, [])
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', loadList)
+    const unsubscribe = navigation.addListener('focus', async () => {
+      const pickedId = route.params?.pickedRecordingId
+      if (pickedId) {
+        navigation.setParams({ pickedRecordingId: undefined })
+        try {
+          const recordings = await loadRecordings()
+          const recording = recordings.find((r: Recording) => r.id === pickedId)
+          if (recording) await createTemplateFromRecording(recording)
+        } catch (error: any) {
+          Alert.alert('创建失败', error?.message ?? String(error))
+        }
+      }
+      await loadList()
+    })
     return unsubscribe
-  }, [navigation])
+  }, [navigation, route])
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)
@@ -159,6 +173,7 @@ export function TemplatesScreen({ navigation }: any) {
         name: nameWithoutExt,
         sourceFileName: displayName,
         audioFilePath: filename,
+        audioSource: 'file',
         pitchDataKey: '',
         duration: Math.min(duration, MAX_DURATION),
         createTime: new Date().toISOString(),
@@ -194,8 +209,11 @@ export function TemplatesScreen({ navigation }: any) {
 
   const onAddPress = () => {
     ActionSheetIOS.showActionSheetWithOptions(
-      { options: ['取消', '从文件导入'], cancelButtonIndex: 0 },
-      (index) => { if (index === 1) importFromFile() }
+      { options: ['取消', '从文件导入', '从录音历史选择'], cancelButtonIndex: 0 },
+      (index) => {
+        if (index === 1) importFromFile()
+        else if (index === 2) navigation.navigate('Recordings', { pickMode: true })
+      }
     )
   }
 
@@ -267,7 +285,7 @@ export function TemplatesScreen({ navigation }: any) {
   const startAudio = async (template: PitchTemplate) => {
     setIsPlaying(true)
     try {
-      const fullPath = `${RNFS.DocumentDirectoryPath}/PitchPerfect/Imports/${template.audioFilePath}`
+      const fullPath = await resolveTemplateAudioPath(template)
       await audioService.playAudio(fullPath, (time) => setCurrentTime(time))
     } catch (error: any) {
       Alert.alert('播放失败', error?.message ?? String(error))

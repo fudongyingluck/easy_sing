@@ -10,7 +10,7 @@ import { PlaybackPitchChart } from '../components/PlaybackPitchChart'
 import { freqToMidi, midiToNoteName } from '../utils/noteUtils'
 import { useTheme } from '../context/ThemeContext'
 
-export function RecordingsScreen({ navigation }: any) {
+export function RecordingsScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets()
   const { colors } = useTheme()
   const [recordings, setRecordings] = useState<Recording[]>([])
@@ -171,7 +171,14 @@ export function RecordingsScreen({ navigation }: any) {
     }
   }
 
+  const pickMode = route.params?.pickMode === true
+
   const onRecordingPress = (recording: Recording) => {
+    if (pickMode) {
+      navigation.navigate('Templates', { pickedRecordingId: recording.id })
+      navigation.setParams({ pickMode: undefined })
+      return
+    }
     if (isSelectionMode) { toggleSelection(recording.id); return }
     openPlayer(recording)
   }
@@ -250,7 +257,18 @@ export function RecordingsScreen({ navigation }: any) {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        {isSelectionMode ? (
+        {pickMode ? (
+          <>
+            <TouchableOpacity onPress={() => {
+              navigation.setParams({ pickMode: undefined })
+              navigation.navigate('Templates')
+            }}>
+              <Text style={styles.headerAction}>取消</Text>
+            </TouchableOpacity>
+            <Text style={[styles.title, { color: colors.text }]}>选择录音作为模板</Text>
+            <View style={{ width: 60 }} />
+          </>
+        ) : isSelectionMode ? (
           <>
             <TouchableOpacity onPress={exitSelectionMode}>
               <Text style={styles.headerAction}>取消</Text>

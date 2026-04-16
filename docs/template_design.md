@@ -40,8 +40,9 @@
 
 ### 来源三：从录音历史选择
 - 点击后在模板页内展示录音历史列表，用户选择一条
-- **无需重新分析**，音频文件和音高数据直接引用，不复制文件
+- **无需重新分析**，音频文件和音高数据直接引用，不复制任何数据
 - 模板记录中保存 `sourceRecordingId` 字段，标明来源录音
+- `audioFilePath` 和 `pitchDataKey` 直接指向原录音的数据，`audioSource` 设为 `'recording'`
 
 ---
 
@@ -64,19 +65,21 @@
 
 ```typescript
 interface PitchTemplate {
-  id: string                      // UUID
-  name: string                    // 用户可编辑的名称
-  sourceFileName: string          // 原始文件名，仅展示用
-  audioFilePath: string           // 沙盒内文件名（不含目录）
-  pitchDataKey: string            // AsyncStorage key，格式同录音
-  duration: number                // 秒
-  createTime: string              // ISO 日期字符串
-  sourceRecordingId?: string      // 若来源为录音转换，记录原录音 id
+  id: string                          // UUID
+  name: string                        // 用户可编辑的名称
+  sourceFileName: string              // 原始文件名，仅展示用
+  audioFilePath: string               // 文件名（不含目录），结合 audioSource 解析完整路径
+  audioSource: 'import' | 'recording' // 音频文件所在目录：Imports/ 或 Recordings/
+  pitchDataKey: string                // AsyncStorage key
+  duration: number                    // 秒
+  createTime: string                  // ISO 日期字符串
+  sourceRecordingId?: string          // 若来源为录音转换，记录原录音 id
 }
 ```
 
 - 音高数据格式与现有 `PitchData` 完全一致，复用现有存储逻辑
-- 从录音转换时，`audioFilePath` 和 `pitchDataKey` 直接指向原录音的数据，不复制文件
+- 从录音转换时，`audioFilePath` 和 `pitchDataKey` 直接指向原录音的数据，不复制任何文件
+- `audioSource` 决定路径解析策略：`'import'` → `Imports/`，`'recording'` → `Recordings/`
 
 ---
 
@@ -91,10 +94,12 @@ interface PitchTemplate {
 | 音频文件（录音来源） | 直接复用录音的 `audioFilePath`，不复制 |
 
 ### 删除联动规则
-- **删除模板** → 只删模板元数据；若来源是导入文件则同时删音频文件和音高数据；若来源是录音则不动原录音
+- **删除模板**
+  - `audioSource === 'import'`：同时删除 `Imports/` 内的音频文件 + AsyncStorage 音高数据
+  - `audioSource === 'recording'`：只删模板元数据，不动原录音的音频文件和音高数据
 - **删除录音** → 若该录音被某模板引用（`sourceRecordingId` 匹配），弹二次确认：「该录音已被设为模板"XXX"，是否同时删除该模板？」
-  - 选「同时删除」→ 录音和模板一并删除，练习页清空选中状态
-  - 选「保留模板」→ 先将录音的音频文件复制一份到 `Imports/` 目录，更新模板的 `audioFilePath` 指向副本，再删除原录音；模板独立存活，不受影响
+  - 选「同时删除」→ 录音和模板元数据一并删除（音频文件和 pitchData 随录音一起清掉）
+  - 选「保留模板」→ 将录音音频文件复制到 `Imports/`，将 pitchData 复制到新 key，更新模板的 `audioFilePath`、`pitchDataKey`、`audioSource` 均指向副本，再删除原录音；两者同步处理，避免状态不一致
 
 ---
 
