@@ -411,7 +411,7 @@ RCT_EXPORT_METHOD(analyzeAudioFile:(NSString *)filePath
     AVAudioFrameCount maxFrames = (AVAudioFrameCount)(capDuration * sr);
 
     const int kWindow  = 2048;
-    int stepFrames     = MAX(1, (int)(sr * 0.1));  // 10 Hz output
+    int stepFrames     = MAX(1, (int)(sr * 0.01)); // 100 Hz output
     int chunkSize      = (int)sr;                   // 1 second per chunk
 
     // mono buffer: [carryover(kWindow)] + [chunk(chunkSize)]
@@ -437,7 +437,7 @@ RCT_EXPORT_METHOD(analyzeAudioFile:(NSString *)filePath
         mono[kWindow + i] = (numCh > 1) ? s / numCh : s;
       }
 
-      // YIN at each 100ms step; window [F, F+kWindow) ⊂ [chunkStart-kWindow, chunkStart+read)
+      // YIN at each 10ms step; window [F, F+kWindow) ⊂ [chunkStart-kWindow, chunkStart+read)
       int maxStep = (int)chunkStart + read - kWindow;
       while (nextStep <= maxStep) {
         double time = (double)nextStep / sr;
@@ -569,9 +569,6 @@ RCT_EXPORT_METHOD(getAudioDuration:(NSString *)filePath
 
 RCT_EXPORT_METHOD(isHeadphonesConnected:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
-#if TARGET_OS_SIMULATOR
-  resolve(@YES);
-#else
   NSArray<AVAudioSessionPortDescription *> *outputs =
     [AVAudioSession sharedInstance].currentRoute.outputs;
   BOOL connected = NO;
@@ -585,7 +582,6 @@ RCT_EXPORT_METHOD(isHeadphonesConnected:(RCTPromiseResolveBlock)resolve
     }
   }
   resolve(@(connected));
-#endif
 }
 
 @end
