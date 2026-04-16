@@ -567,4 +567,25 @@ RCT_EXPORT_METHOD(getAudioDuration:(NSString *)filePath
   [super invalidate];
 }
 
+RCT_EXPORT_METHOD(isHeadphonesConnected:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+#if TARGET_OS_SIMULATOR
+  resolve(@YES);
+#else
+  NSArray<AVAudioSessionPortDescription *> *outputs =
+    [AVAudioSession sharedInstance].currentRoute.outputs;
+  BOOL connected = NO;
+  for (AVAudioSessionPortDescription *port in outputs) {
+    if ([port.portType isEqualToString:AVAudioSessionPortHeadphones] ||
+        [port.portType isEqualToString:AVAudioSessionPortBluetoothA2DP] ||
+        [port.portType isEqualToString:AVAudioSessionPortBluetoothHFP] ||
+        [port.portType isEqualToString:AVAudioSessionPortBluetoothLE]) {
+      connected = YES;
+      break;
+    }
+  }
+  resolve(@(connected));
+#endif
+}
+
 @end

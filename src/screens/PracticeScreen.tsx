@@ -215,7 +215,7 @@ export function PracticeScreen({ navigation }: any) {
 
       // 有模板时检查耳机，避免模板音频被麦克风拾入录音
       if (selectedTemplate) {
-        const connected: boolean = await NativeModules.AudioSessionModule?.isHeadphonesConnected?.() ?? false
+        const connected: boolean = await NativeModules.PitchDetectorModule?.isHeadphonesConnected?.() ?? false
         if (!connected) {
           const proceed = await new Promise<boolean>(resolve => {
             Alert.alert(
