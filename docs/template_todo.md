@@ -62,14 +62,14 @@
 ### F7：从录音历史创建模板
 可测效果：「＋」→「从录音历史选择」→ 选一条录音 → 立即生成模板（无需分析）
 
-- [ ] `createTemplateFromRecording`（直接引用，不复制数据）
-- [ ] TemplatesScreen 内嵌录音历史选择列表
+- [x] `createTemplateFromRecording`（直接引用，不复制数据）
+- [x] TemplatesScreen 内嵌录音历史选择列表
 
 ### F8：完善交互与边界处理
 可测效果：删除/重命名/多选/文件损坏等异常场景
 
-- [ ] 重命名（长按弹 Alert）
-- [ ] 多选模式 + 批量删除
+- [ ] 重命名（长按弹 Alert）——RecordingsScreen 已做，TemplatesScreen 未做
+- [x] 多选模式 + 批量删除（两个页面均已实现）
 - [ ] 删录音时检查模板引用，弹二次确认
 - [ ] 文件损坏 / 格式不支持错误提示
 - [ ] 整体走查

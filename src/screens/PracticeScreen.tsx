@@ -89,6 +89,7 @@ export function PracticeScreen({ navigation }: any) {
       if (selectedTemplate) {
         const still = list.find(t => t.id === selectedTemplate.id)
         if (!still) { setSelectedTemplate(null); setTemplatePitchData([]); setTemplateAudioPath('') }
+        else if (still.name !== selectedTemplate.name) setSelectedTemplate(still)
       }
     })
     const unsubscribeBlur = navigation.addListener('blur', () => {

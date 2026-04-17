@@ -217,6 +217,21 @@ export function TemplatesScreen({ navigation, route }: any) {
     )
   }
 
+  const renameTemplate = (template: PitchTemplate) => {
+    Alert.prompt(
+      '重命名',
+      '请输入新名称',
+      async (newName) => {
+        const trimmed = newName?.trim()
+        if (!trimmed || trimmed === template.name) return
+        await updateTemplate({ ...template, name: trimmed })
+        await loadList()
+      },
+      'plain-text',
+      template.name,
+    )
+  }
+
   const onDeletePress = (template: PitchTemplate) => {
     Alert.alert('确认删除', `确定要删除模板"${template.name}"吗？`, [
       { text: '取消', style: 'cancel' },
@@ -381,7 +396,7 @@ export function TemplatesScreen({ navigation, route }: any) {
                 </View>
               )}
               <View style={styles.itemInfo}>
-                <Text style={[styles.itemName, { color: colors.text }]}>♪ {template.name}</Text>
+                <Text style={[styles.itemName, { color: colors.text }]} onLongPress={() => renameTemplate(template)}>♪ {template.name}</Text>
                 <Text style={[styles.itemMeta, { color: colors.textSecondary }]}>
                   时长: {formatDuration(template.duration)} · {template.sourceFileName}
                 </Text>
