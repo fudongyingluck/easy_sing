@@ -97,9 +97,12 @@ interface PitchTemplate {
 - **删除模板**
   - `audioSource === 'import'`：同时删除 `Imports/` 内的音频文件 + AsyncStorage 音高数据
   - `audioSource === 'recording'`：只删模板元数据，不动原录音的音频文件和音高数据
-- **删除录音** → 若该录音被某模板引用（`sourceRecordingId` 匹配），弹二次确认：「该录音已被设为模板"XXX"，是否同时删除该模板？」
-  - 选「同时删除」→ 录音和模板元数据一并删除（音频文件和 pitchData 随录音一起清掉）
-  - 选「保留模板」→ 将录音音频文件复制到 `Imports/`，将 pitchData 复制到新 key，更新模板的 `audioFilePath`、`pitchDataKey`、`audioSource` 均指向副本，再删除原录音；两者同步处理，避免状态不一致
+- **删除录音** → 先检查是否有模板引用该录音（`sourceRecordingId` 匹配）：
+  - 弹窗一（无论是否有引用）：普通确认弹窗「确定要删除录音"XXX"吗？」，与现在一致
+  - 用户确认后，若有模板引用，弹窗二：「该录音已被设为模板"XXX"，如何处理？」，两个按钮：
+    - 「同时删除模板」（destructive）→ 相关模板元数据一并删除（音频文件和 pitchData 随录音一起清掉）
+    - 「保留模板」→ 将录音音频文件复制到 `Imports/`，将 pitchData 复制到新 key，更新模板的 `audioFilePath`、`pitchDataKey`、`audioSource` 均指向副本，再删除原录音
+  - **批量删除时**：弹窗一同上；用户确认后，若有引用，弹窗二说明受影响的模板数量，用户选择统一处理策略后批量执行
 
 ---
 

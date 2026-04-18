@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from 'react-native-vector-icons/Ionicons'
 import { Recording, PitchDataPoint } from '../types'
 import { loadRecordings, saveRecordings, deleteRecordingFiles, loadPitchData } from '../services/storage'
+import { findTemplatesReferencingRecording, migrateTemplateToImport, deleteTemplate, loadTemplates } from '../services/templateStorage'
 import { audioService } from '../services/audio'
 import { nativePitchRecorder } from '../services/nativePitchRecorder'
 import { PlaybackPitchChart } from '../components/PlaybackPitchChart'
@@ -217,41 +218,103 @@ export function RecordingsScreen({ navigation, route }: any) {
 
   const deleteRecording = async (recording: Recording) => {
     if (isSelectionMode) { toggleSelection(recording.id); return }
-    Alert.alert('确认删除', `确定要删除录音"${recording.name}"吗？`, [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '删除', style: 'destructive',
-        onPress: async () => {
-          if (activeRecording?.id === recording.id) closePlayer()
-          await deleteRecordingFiles(recording)
-          const updatedList = recordings.filter(r => r.id !== recording.id)
-          await saveRecordings(updatedList)
-          setRecordings(updatedList)
+
+    const doDelete = async (keepTemplates: boolean, referencingTemplates: Awaited<ReturnType<typeof findTemplatesReferencingRecording>>) => {
+      if (activeRecording?.id === recording.id) closePlayer()
+      if (keepTemplates) {
+        const fullPath = await nativePitchRecorder.resolveRecordingPath(
+          recording.audioFilePath.split('/').pop() ?? recording.audioFilePath
+        )
+        for (const t of referencingTemplates) {
+          await migrateTemplateToImport(t, fullPath)
+        }
+      } else {
+        for (const t of referencingTemplates) {
+          await deleteTemplate(t)
         }
       }
-    ])
+      await deleteRecordingFiles(recording)
+      const updatedList = recordings.filter(r => r.id !== recording.id)
+      await saveRecordings(updatedList)
+      setRecordings(updatedList)
+    }
+
+    const referencingTemplates = await findTemplatesReferencingRecording(recording.id)
+
+    if (referencingTemplates.length === 0) {
+      Alert.alert('删除确认', `确定要删除录音"${recording.name}"吗？`, [
+        { text: '取消', style: 'cancel' },
+        { text: '删除', style: 'destructive', onPress: () => doDelete(false, []) },
+      ])
+    } else {
+      const templateNames = referencingTemplates.map(t => t.name).join('、')
+      Alert.alert(
+        '删除确认',
+        `该录音已被设置为模板 ${templateNames}，删除录音和模板？`,
+        [
+          { text: '取消' },
+          { text: '同时删除', style: 'destructive', onPress: () => doDelete(false, referencingTemplates) },
+          { text: '保留模板', onPress: () => doDelete(true, referencingTemplates) },
+        ]
+      )
+    }
   }
 
   const deleteSelected = async () => {
     if (selectedIds.size === 0) return
-    Alert.alert('确认删除', `确定要删除选中的 ${selectedIds.size} 个录音吗？`, [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '删除', style: 'destructive',
-        onPress: async () => {
-          if (activeRecording && selectedIds.has(activeRecording.id)) closePlayer()
-          for (const id of Array.from(selectedIds)) {
-            const rec = recordings.find(r => r.id === id)
-            if (rec) await deleteRecordingFiles(rec)
+
+    const selectedRecordings = recordings.filter(r => selectedIds.has(r.id))
+    const allTemplates = await loadTemplates()
+    const referencedPairs: { recording: Recording; templates: typeof allTemplates }[] = []
+    for (const rec of selectedRecordings) {
+      const matched = allTemplates.filter(t => t.sourceRecordingId === rec.id)
+      if (matched.length > 0) referencedPairs.push({ recording: rec, templates: matched })
+    }
+    const totalTemplateCount = referencedPairs.reduce((sum, p) => sum + p.templates.length, 0)
+
+    const doDeleteSelected = async (keepTemplates: boolean) => {
+      if (activeRecording && selectedIds.has(activeRecording.id)) closePlayer()
+      for (const { recording, templates } of referencedPairs) {
+        if (keepTemplates) {
+          const fullPath = await nativePitchRecorder.resolveRecordingPath(
+            recording.audioFilePath.split('/').pop() ?? recording.audioFilePath
+          )
+          for (const t of templates) {
+            await migrateTemplateToImport(t, fullPath)
           }
-          const updatedList = recordings.filter(r => !selectedIds.has(r.id))
-          await saveRecordings(updatedList)
-          setRecordings(updatedList)
-          setSelectedIds(new Set())
-          setIsSelectionMode(false)
+        } else {
+          for (const t of templates) {
+            await deleteTemplate(t)
+          }
         }
       }
-    ])
+      for (const rec of selectedRecordings) {
+        await deleteRecordingFiles(rec)
+      }
+      const updatedList = recordings.filter(r => !selectedIds.has(r.id))
+      await saveRecordings(updatedList)
+      setRecordings(updatedList)
+      setSelectedIds(new Set())
+      setIsSelectionMode(false)
+    }
+
+    if (totalTemplateCount === 0) {
+      Alert.alert('删除确认', `确定要删除选中的 ${selectedIds.size} 个录音吗？`, [
+        { text: '取消', style: 'cancel' },
+        { text: '删除', style: 'destructive', onPress: () => doDeleteSelected(false) },
+      ])
+    } else {
+      const templateNames = referencedPairs.flatMap(p => p.templates).map(t => t.name).join('、')
+      Alert.alert(
+        '删除确认',
+        `该录音已被设置为模板 ${templateNames}，删除录音和模板？`,
+        [
+          { text: '取消' },
+          { text: '同时删除', style: 'destructive', onPress: () => doDeleteSelected(false) },
+          { text: '保留模板', onPress: () => doDeleteSelected(true) },
+        ]
+      )
+    }
   }
 
   return (

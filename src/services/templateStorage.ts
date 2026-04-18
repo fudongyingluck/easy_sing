@@ -95,6 +95,51 @@ export async function saveTemplatePitchData(templateId: string, pitchData: Pitch
   return key
 }
 
+/** 查找所有引用了指定录音的模板 */
+export async function findTemplatesReferencingRecording(recordingId: string): Promise<PitchTemplate[]> {
+  const list = await loadTemplates()
+  return list.filter(t => t.sourceRecordingId === recordingId)
+}
+
+/** 将「引用录音」的模板迁移为独立的 Imports 文件，用于「删录音但保留模板」场景
+ *  1. 复制录音音频文件到 Imports/
+ *  2. 复制音高数据到模板独立 key
+ *  3. 更新模板 audioSource / pitchDataKey
+ */
+export async function migrateTemplateToImport(
+  template: PitchTemplate,
+  recordingFullAudioPath: string,
+): Promise<void> {
+  await RNFS.mkdir(IMPORTS_DIR)
+  const filename = toFilename(template.audioFilePath)
+  const destPath = `${IMPORTS_DIR}/${filename}`
+
+  // 复制音频文件
+  const exists = await RNFS.exists(recordingFullAudioPath)
+  if (exists) {
+    await RNFS.copyFile(recordingFullAudioPath, destPath)
+  }
+
+  // 复制音高数据到新 key（防止删录音时 pitchDataKey 被一起清掉）
+  let newPitchDataKey = template.pitchDataKey
+  if (template.pitchDataKey) {
+    const raw = await AsyncStorage.getItem(template.pitchDataKey)
+    if (raw) {
+      newPitchDataKey = `@pitchperfect:pitchdata:template_${template.id}`
+      await AsyncStorage.setItem(newPitchDataKey, raw)
+    }
+  }
+
+  // 更新模板元数据
+  const updated: PitchTemplate = {
+    ...template,
+    audioSource: 'deleted_record',
+    pitchDataKey: newPitchDataKey,
+    sourceRecordingId: undefined,
+  }
+  await updateTemplate(updated)
+}
+
 /** 读取模板音高数据，key 为空或数据不存在时返回 null */
 export async function loadTemplatePitchData(key: string): Promise<PitchData | null> {
   if (!key) return null

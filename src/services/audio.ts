@@ -7,6 +7,25 @@ import { CONFIG } from '../config/constants'
 
 const DEFAULT_MAX_DURATION = CONFIG.MAX_RECORDING_DURATION
 
+/**
+ * 解析音频文件的当前有效绝对路径。
+ *
+ * ⚠️ 不要绕过这个函数直接使用存储的路径：
+ *   - 录音文件存的是创建时的绝对路径，iOS 沙盒 UUID 会随应用更新/重装变化，直接使用会导致"operation couldn't be completed"报错
+ *   - 必须通过 resolveRecordingPath 动态定位当前路径
+ *
+ * 规则：
+ *   - 包含 /Imports/ 的路径（从外部导入的模板文件）→ 直接返回，路径由我们自己写入沙盒，始终有效
+ *   - 其他路径（录音文件）→ 提取文件名，走 resolveRecordingPath 获取当前有效路径
+ */
+async function resolveAudioPath(filePath: string): Promise<string> {
+  if (filePath.includes('/Imports/')) {
+    return filePath
+  }
+  const filename = filePath.split('/').pop() ?? filePath
+  return nativePitchRecorder.resolveRecordingPath(filename)
+}
+
 export class AudioService {
   private recordingId: string | null = null
   private pitchData: PitchDataPoint[] = []
@@ -161,8 +180,7 @@ export class AudioService {
     audioPlayer.release()  // 释放所有钢琴 Sound 对象，防止 session 重激活时 iOS 自动恢复
     NativeModules.AudioSessionModule?.resetForPlayback?.()
 
-    // 调用方负责传入完整绝对路径（通过 resolveTemplateAudioPath 或 resolveRecordingPath 解析）
-    const resolvedPath = filePath
+    const resolvedPath = await resolveAudioPath(filePath)
 
     // 懒加载，避免模块初始化时修改 AVAudioSession 影响录音
     // eslint-disable-next-line @typescript-eslint/no-require-imports

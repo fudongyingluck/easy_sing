@@ -68,7 +68,7 @@
 ### F8：完善交互与边界处理
 可测效果：删除/重命名/多选/文件损坏等异常场景
 
-- [ ] 重命名（长按弹 Alert）——RecordingsScreen 已做，TemplatesScreen 未做
+- [x] 重命名（长按弹 Alert）——RecordingsScreen 已做，TemplatesScreen 未做
 - [x] 多选模式 + 批量删除（两个页面均已实现）
 - [ ] 删录音时检查模板引用，弹二次确认
 - [ ] 文件损坏 / 格式不支持错误提示
