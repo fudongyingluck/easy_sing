@@ -285,7 +285,7 @@ export function PracticeScreen({ navigation }: any) {
   // 处理钢琴按键
   const handlePianoKeyPress = (note: string, freq: number) => {
     console.log(`Piano key pressed: ${note} (${freq}Hz)`)
-    audioPlayer.playNote(note, 0.5)
+    audioPlayer.playNote(note)
   }
 
   return (

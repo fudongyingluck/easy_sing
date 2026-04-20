@@ -59,7 +59,7 @@ class AudioPlayer {
     })
   }
 
-  async playNote(noteName: string, duration: number = 0.5): Promise<void> {
+  async playNote(noteName: string): Promise<void> {
     console.log(`[AudioPlayer] playNote: ${noteName}`)
     const sound = await this.loadSound(noteName)
     if (sound) {
