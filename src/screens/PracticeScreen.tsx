@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Alert, Linking, Modal, NativeModules } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Alert, Linking, Modal, NativeModules, NativeEventEmitter } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Ionicons from 'react-native-vector-icons/Ionicons'
 import RNFS from 'react-native-fs'
@@ -48,6 +48,17 @@ export function PracticeScreen({ navigation }: any) {
   const recordingTimerRef = useRef<any>(null)
   const lastTapTimeRef = useRef<number>(0)
   const templateSoundRef = useRef<any>(null)
+
+  // 耳机断开时暂停模板音频
+  useEffect(() => {
+    const emitter = new NativeEventEmitter(NativeModules.AudioSessionModule)
+    const sub = emitter.addListener('onHeadphonesDisconnected', () => {
+      if (templateSoundRef.current) {
+        templateSoundRef.current.pause()
+      }
+    })
+    return () => sub.remove()
+  }, [])
 
   // 组件卸载时清理 timer 和 audioService 回调，防止内存泄漏
   useEffect(() => {
@@ -118,8 +129,8 @@ export function PracticeScreen({ navigation }: any) {
       if (outOfRange) {
         const confirmed = await new Promise<boolean>(resolve => {
           Alert.alert(
-            '音域范围不完全匹配',
-            `模板音高范围（${template.minNote}–${template.maxNote}）超出当前练习范围（${mode.startNote}–${mode.endNote}），超出部分将不展示。\n\n是否继续使用此模板？`,
+            '模版使用确认',
+            `模板音高范围（${template.minNote}–${template.maxNote}）超出当前练习范围（${mode.startNote}–${mode.endNote}），超出部分将不展示。`,
             [
               { text: '取消', style: 'cancel', onPress: () => resolve(false) },
               { text: '继续', onPress: () => resolve(true) },

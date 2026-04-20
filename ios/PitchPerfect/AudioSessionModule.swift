@@ -1,10 +1,40 @@
 import Foundation
 import AVFoundation
+import React
 
 @objc(AudioSessionModule)
-class AudioSessionModule: NSObject {
+class AudioSessionModule: RCTEventEmitter {
 
-  @objc static func requiresMainQueueSetup() -> Bool { return false }
+  override static func requiresMainQueueSetup() -> Bool { return false }
+
+  override func supportedEvents() -> [String]! {
+    return ["onHeadphonesDisconnected"]
+  }
+
+  override init() {
+    super.init()
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleRouteChange(_:)),
+      name: AVAudioSession.routeChangeNotification,
+      object: nil
+    )
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+  }
+
+  @objc private func handleRouteChange(_ notification: Notification) {
+    guard
+      let info = notification.userInfo,
+      let reasonValue = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
+      let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue),
+      reason == .oldDeviceUnavailable || reason == .newDeviceAvailable
+    else { return }
+
+    sendEvent(withName: "onHeadphonesDisconnected", body: nil)
+  }
 
   // 用于钢琴音效：在录音 session 内混音播放
   @objc func resetForPlayback() {

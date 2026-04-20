@@ -70,7 +70,7 @@
 
 - [x] 重命名（长按弹 Alert）——RecordingsScreen 已做，TemplatesScreen 未做
 - [x] 多选模式 + 批量删除（两个页面均已实现）
-- [ ] 删录音时检查模板引用，弹二次确认
+- [x] 删录音时检查模板引用，弹二次确认
 - [ ] 文件损坏 / 格式不支持错误提示
 - [ ] 整体走查
 
@@ -119,10 +119,10 @@
     - [ ] 来源为录音引用：只删模板元数据，不动原录音
   - [ ] `createTemplateFromRecording(recording): Promise<PitchTemplate>`：从录音直接创建模板引用，不复制数据
   - [ ] `resolveTemplateAudioPath(filename): Promise<string>`（参考 `resolveRecordingPath`）
-- [ ] `src/screens/RecordingsScreen.tsx`：删除录音前检查是否有模板引用该录音（`sourceRecordingId` 匹配）
-    - [ ] 有引用时弹二次确认：「该录音已被设为模板"XXX"，是否同时删除该模板？」
-    - [ ] 选「同时删除」→ 删录音 + 删模板，练习页清空选中状态
-    - [ ] 选「保留模板」→ 将录音音频文件复制到 `Imports/` 目录 → 更新模板 `audioFilePath` 指向副本 → 再删除原录音
+- [x] `src/screens/RecordingsScreen.tsx`：删除录音前检查是否有模板引用该录音（`sourceRecordingId` 匹配）
+    - [x] 有引用时弹单个确认弹窗，包含三个选项：「同时删除」「保留模板」「取消」
+    - [x] 选「同时删除」→ 删录音 + 删模板，练习页清空选中状态
+    - [x] 选「保留模板」→ 将录音音频文件复制到 `Imports/` 目录 → 更新模板 `audioFilePath` 指向副本 → 再删除原录音
 
 ---
 
