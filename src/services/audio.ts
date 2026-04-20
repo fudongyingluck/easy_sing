@@ -57,6 +57,7 @@ export class AudioService {
 
   async startRecording(durationLimit: number = DEFAULT_MAX_DURATION, detectionRate: number = 100): Promise<string> {
     await this.stopAll()
+    audioPlayer.stopAll()  // 停止所有钢琴音，防止 session 重激活时 iOS 重播
 
     this.recordingId = `rec_${Date.now()}`
     this.pitchData = []

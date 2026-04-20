@@ -49,10 +49,11 @@ export function PracticeScreen({ navigation }: any) {
   const lastTapTimeRef = useRef<number>(0)
   const templateSoundRef = useRef<any>(null)
 
-  // 耳机断开时暂停模板音频
+  // 耳机断开时停止所有音频（钢琴 + 模板），防止 iOS 路由切换触发重播
   useEffect(() => {
     const emitter = new NativeEventEmitter(NativeModules.AudioSessionModule)
     const sub = emitter.addListener('onHeadphonesDisconnected', () => {
+      audioPlayer.stopAll()
       if (templateSoundRef.current) {
         templateSoundRef.current.pause()
       }
