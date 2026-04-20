@@ -55,9 +55,18 @@ export class AudioService {
     this.onMaxDurationReached = callback
   }
 
+  /**
+   * ⚠️ 唯一允许调用 resetForPlayback 的入口。
+   * 必须先 release 所有钢琴 Sound 对象，否则 iOS 在 session 重激活时会自动恢复它们的播放。
+   * 禁止在其他地方直接调用 NativeModules.AudioSessionModule?.resetForPlayback?.()
+   */
+  private activatePlaybackSession(): void {
+    audioPlayer.release()
+    NativeModules.AudioSessionModule?.resetForPlayback?.()
+  }
+
   async startRecording(durationLimit: number = DEFAULT_MAX_DURATION, detectionRate: number = 100): Promise<string> {
     await this.stopAll()
-    audioPlayer.stopAll()  // 停止所有钢琴音，防止 session 重激活时 iOS 重播
 
     this.recordingId = `rec_${Date.now()}`
     this.pitchData = []
@@ -66,7 +75,7 @@ export class AudioService {
     this.isRecording = true
     this.isPaused = false
 
-    NativeModules.AudioSessionModule?.resetForPlayback?.()
+    this.activatePlaybackSession()
     await nativePitchRecorder.startDetection(detectionRate)
     await nativePitchRecorder.startRecording()
 
@@ -178,8 +187,7 @@ export class AudioService {
 
   async playAudio(filePath: string, onProgress?: (time: number) => void, startTime?: number): Promise<void> {
     this.stopPlayback()
-    audioPlayer.release()  // 释放所有钢琴 Sound 对象，防止 session 重激活时 iOS 自动恢复
-    NativeModules.AudioSessionModule?.resetForPlayback?.()
+    this.activatePlaybackSession()
 
     const resolvedPath = await resolveAudioPath(filePath)
 
@@ -242,7 +250,7 @@ export class AudioService {
 
   resumePlayback(onProgress?: (time: number) => void): void {
     if (!this.playbackSound) return
-    NativeModules.AudioSessionModule?.resetForPlayback?.()
+    this.activatePlaybackSession()
     if (this.playbackTimer) { clearInterval(this.playbackTimer); this.playbackTimer = null }
     if (onProgress) {
       this.playbackTimer = setInterval(() => {
