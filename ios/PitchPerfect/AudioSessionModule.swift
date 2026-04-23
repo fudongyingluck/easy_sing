@@ -7,6 +7,15 @@ class AudioSessionModule: RCTEventEmitter {
 
   override static func requiresMainQueueSetup() -> Bool { return false }
 
+  @objc func getBuildInfo(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+    resolve([
+      "bundleId": Bundle.main.bundleIdentifier ?? "",
+      "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+      "buildNumber": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "",
+      "deviceId": UIDevice.current.identifierForVendor?.uuidString ?? "",
+    ])
+  }
+
   override func supportedEvents() -> [String]! {
     return ["onHeadphonesDisconnected"]
   }
