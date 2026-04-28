@@ -4,7 +4,38 @@
 
 ## Bug 列表
 
-### 1. ~~模板橙色线加载后部分不显示~~（已解决）
+### 0. 录音中音高曲线和音频周期性掉段（待定位）
+- **状态**：🔍 原因未确认，待复现验证
+- **现象**：
+  - 录音过程中，音高曲线和声音会周期性消失一小段（约几百毫秒），然后恢复，反复发生
+- **可能原因（按可能性排序）**：
+  1. **`setVoiceProcessingEnabled:YES`（最可能）**：AUVoiceIO 为电话通话设计，会把唱歌的持续音当噪声周期性压制 → 进入 tap 的 samples 幅度降低 → RMS < 0.008 → 检测跳过，同时 WAV 写入近零数据
+  2. **AVAudioEngine 路由变化后无恢复机制**：代码未监听 `AVAudioEngineConfigurationChangeNotification`，蓝牙重协商等路由变化时 engine 暂停后无法重启
+  3. **滑窗 buffer size 问题**：路由变化瞬间 iOS 可能下发小 buffer（< kWindow=2048 frames），导致滑窗条件 `offset + kWindow <= frames` 不成立，整段无分析
+- **验证方法**：掉段后回放那段录音——若那段是**真静音**则为原因 1；若声音完整但曲线空白则为原因 2 或 3
+- **涉及文件**：`ios/PitchPerfect/PitchDetectorModule.mm`（第 163-167 行 voice processing、第 228 行滑窗条件）
+
+### 1. 播放历史录音/模板时红线闪动 + 音高曲线消失（待修复）
+- **状态**：🐛 已确认，待修复
+- **现象**：
+  - 播放历史录音或模板时，红线（当前时间指示线）以 100ms 频率闪动
+  - 播放过程中音高曲线会短暂消失
+- **根本原因**：`PlaybackPitchChart` 中 `currentTime` 和 `viewportStart` 更新时序不一致导致的"撕裂"（tearing）：
+  - `currentTime` 由 100ms 定时器直接 `setCurrentTime(t)` → 立即触发 re-render
+  - `viewportStart` 由 `viewportAnim.setValue()` 驱动，但更新路径是 `useEffect([currentTime])` → 动画 listener → `setViewportStart()`，比 `currentTime` 晚一帧
+  - 每次 `currentTime` 更新，都有一帧 `viewportStart` 是旧值，红线位置用两者之差计算，导致每 100ms 闪一次
+  - 同理，这一帧旧的 `viewportStart/viewportEnd` 传给 `PitchCanvas`，可能导致 `bisectLeft/bisectRight` 切出空区间，曲线短暂消失
+- **修复思路**：在同一帧内同步更新 `currentTime` 和 `viewportStart`，或改用 ref 直接驱动红线位置（不走 React state），避免异步 useEffect 带来的时序差
+- **涉及文件**：`src/components/PlaybackPitchChart.tsx`
+
+### 2. 偶发：点击「放弃」后出现钢琴声（待定位）
+- **状态**：🐛 偶发，未找到稳定复现路径
+- **现象**：
+  - 点击「放弃」停止录音后，会听到钢琴音播放出来
+- **可能原因**：`discardRecording` 调用了 `audioPlayer.stopAll()` 和 `audioService.stopPlayback()`，但没有调用 `audioPlayer.release()`；若此时有残留的 Sound 对象（钢琴音或模板音），iOS 可能在 session 重置后恢复播放。可对比 `activatePlaybackSession` 的逻辑——它强制 `release()` 再激活 session。
+- **涉及文件**：`src/screens/PracticeScreen.tsx`（`discardRecording` 函数）
+
+### 3. ~~模板橙色线加载后部分不显示~~（已解决）
 - **状态**：✅ 已修复
 - **现象**：
   - 选择模板后，视口内应显示的橙色模板线只有部分出现（如 3 条中只显示 1 条）
@@ -48,6 +79,49 @@
   - `src/config/constants.ts`
   - `src/services/audio.ts`
   - `src/screens/TemplatesScreen.tsx`
+
+---
+
+## code_fix_1（代码结构问题）
+
+### CF1-1. PracticeScreen 过于臃肿（God Component）
+- **现状**：~765 行，录音状态机、音高数据、计时器、模板选择/播放、钢琴模式切换、用户设置加载、双击检测、Modal 状态全堆在一个组件里
+- **修复方向**：
+  - 将录音生命周期（start/pause/resume/stop/discard/save + 计时器 + pitchData 回调）抽为 `useRecording()` 自定义 Hook
+  - 将模板音频管理（startTemplateAudio / stopTemplateSound / templateSoundRef）抽为 `useTemplateAudio()` Hook
+- **预期效果**：PracticeScreen 缩减到纯 UI 层，逻辑可独立测试
+
+### CF1-2. 模板音频绕过 AudioService，形成平行音频管理路径
+- **现状**：录音/历史回放走 `audioService`，模板音频在 `PracticeScreen` 里直接 `new Sound(path, '', callback)` 管理。两条路径的生命周期互相不知道，已导致 Bug #2（放弃后偶发钢琴声）
+- **修复方向**：将模板音频纳入统一管理，或至少在 `discardRecording` / `saveAndStopRecording` 时确保 `audioPlayer.release()` 被调用（短期修复见 Bug #2）
+
+### CF1-3. AudioService 混了录音和回放两个职责
+- **现状**：`audio.ts` 里同时有 `startRecording/pauseRecording/stopRecording` 和 `playAudio/pausePlayback/resumePlayback/seekTo`，两个场景完全互斥但共处一类，`stopAll` 逻辑因此复杂
+- **修复方向**：拆分为 `RecordingService` 和 `PlaybackService`，或至少在类内部通过命名空间清晰隔离
+
+### CF1-4. 路径解析逻辑分散在三处
+- **现状**：
+  - `audio.ts` 里有 `resolveAudioPath()`
+  - `storage.ts` 里有 `getRecordingPath()` / `getPitchDataPath()`
+  - `nativePitchRecorder.ts` 里有 `resolveRecordingPath()`
+- **修复方向**：统一收拢到 `storage.ts` 或新建 `pathUtils.ts`，单一出口
+
+### CF1-5. `useDoubleTap` Hook 是死代码
+- **现状**：`utils/doubleTap.ts` 封装了 `useDoubleTap`，但 `PracticeScreen` 自己用 `lastTapTimeRef + handleDoubleTap` 重新实现了一遍，逻辑完全一样
+- **修复方向**：`PracticeScreen` 改用 `useDoubleTap`，删掉内联实现；或反过来删掉 `doubleTap.ts`，保留内联
+
+### CF1-6. `freqToMidi` 定义了两遍
+- **现状**：`utils/noteUtils.ts` 和 `components/PitchCanvas.tsx` 各有一份逻辑相同的实现
+- **修复方向**：`PitchCanvas.tsx` 改为 import `noteUtils.ts` 里的版本
+
+### CF1-7. `CONFIG` 里有一堆未使用的 YIN 算法常量
+- **现状**：`config/constants.ts` 里的 `YIN_THRESHOLD / YIN_SAMPLE_RATE / YIN_BUFFER_SIZE / YIN_OVERLAP / YIN_CONFIDENCE_THRESHOLD` 在 JS 层从未被读取（YIN 算法跑在 Native）
+- **修复方向**：直接删除
+
+### CF1-8. 文档与代码不符（文档需更新）
+- `template_design.md` 中 `audioSource` 枚举为 `'import' | 'recording'`，代码已变为 `'file' | 'exist_record' | 'deleted_record'`
+- `implementation.md` 中导航结构写的是 3 个 Tab（练习/录音/设置），当前已是 4 个（练习/记录/模板/设置）
+- `implementation.md` 中引用的 `RecordingPitchChart` 实际文件名为 `PlaybackPitchChart`
 
 ---
 

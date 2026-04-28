@@ -13,6 +13,15 @@ import { NotePicker } from '../components/NotePicker'
 import { UserSettings } from '../types'
 import { useTheme } from '../context/ThemeContext'
 
+type BuildInfo = { bundleId: string; appVersion: string; buildNumber: string; deviceId: string }
+let buildInfoPromise: Promise<BuildInfo | null> | null = null
+function getBuildInfo(): Promise<BuildInfo | null> {
+  if (!buildInfoPromise) {
+    const p = NativeModules.AudioSessionModule?.getBuildInfo?.() as Promise<BuildInfo> | undefined
+    buildInfoPromise = p ?? Promise.resolve(null)
+  }
+  return buildInfoPromise
+}
 
 // ─── SettingRow ───────────────────────────────────────────────────────────────
 
@@ -506,9 +515,9 @@ export function SettingsScreen() {
   const [showFeedback, setShowFeedback] = useState(false)
   const [emailCopied, setEmailCopied] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
-  const [buildInfo, setBuildInfo] = useState({ bundleId: '', appVersion: '', buildNumber: '', deviceId: '' })
+  const [buildInfo, setBuildInfo] = useState<BuildInfo>({ bundleId: '', appVersion: '', buildNumber: '', deviceId: '' })
   const debugTapCount = useRef(0)
-  const debugTapTimer = useRef<any>(null)
+  const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const FEEDBACK_EMAIL = 'dongguafu@gmail.com'
 
@@ -529,13 +538,10 @@ export function SettingsScreen() {
   }
 
   useEffect(() => {
-    Promise.all([
-      loadUserSettings(),
-      NativeModules.AudioSessionModule?.getBuildInfo?.() as Promise<{ bundleId: string; appVersion: string; buildNumber: string; deviceId: string }> | undefined,
-    ]).then(([s, info]) => {
+    Promise.all([loadUserSettings(), getBuildInfo()]).then(([s, info]) => {
       setSettings(s)
       if (info) setBuildInfo(info)
-    })
+    }).catch(console.error)
     return () => {
       if (debugTapTimer.current) clearTimeout(debugTapTimer.current)
     }

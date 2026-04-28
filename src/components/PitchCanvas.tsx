@@ -184,7 +184,9 @@ export const PitchCanvas = memo(function PitchCanvas({
   for (let midi = minMidi; midi <= maxMidi; midi++) allMidiLines.push(midi)
 
   const xAxisLabels = []
-  for (let t = Math.ceil(startTime); t <= startTime + duration; t++) xAxisLabels.push(t)
+  for (let t = Math.ceil(startTime); t <= startTime + duration; t++) {
+    if (t >= 0) xAxisLabels.push(t)
+  }
 
   // 左右各扩一个 LINE_TIME_GAP 的缓冲，确保跨越视口边界的线段不被截断
   // 视觉裁切由 SVG clipPath 处理；二分查找 O(log n) 避免遍历整个数组
@@ -291,7 +293,9 @@ export function PitchXAxis({ startTime, endTime, width }: PitchXAxisProps) {
   const timeToX = (t: number) => PADDING.left + ((t - startTime) / duration) * chartWidth
 
   const labels = []
-  for (let t = Math.ceil(startTime); t <= endTime; t++) labels.push(t)
+  for (let t = Math.ceil(startTime); t <= endTime; t++) {
+    if (t >= 0) labels.push(t)
+  }
   return (
     <View style={[styles.xAxisContainer, { width, backgroundColor: colors.chartBackground, borderTopColor: colors.border }]}>
       {labels.map(t => (

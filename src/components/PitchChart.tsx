@@ -8,6 +8,17 @@ import { useTheme } from '../context/ThemeContext'
 
 export type { NoteDisplay }
 
+/**
+ * 录音模式下视口的右边沿（= endTime）。
+ * 红线居中逻辑：视口宽 duration，currentTime 位于中点。
+ * 当 currentTime < duration/2 时红线还未到中间，viewportEnd 钉在 duration（红线从左向右走）。
+ * @param currentTime 当前录音时间
+ * @param duration    视口时间跨度
+ */
+function recordingViewportEnd(currentTime: number, duration: number): number {
+  return Math.max(duration, currentTime + duration / 2)
+}
+
 interface PitchChartProps {
   data: PitchDataPoint[]
   templateData?: PitchDataPoint[]
@@ -76,10 +87,10 @@ export function PitchChart({
     scrollViewRef.current?.scrollTo({ y, animated: false })
   }
 
-  // paused 状态切换时更新视口，至少为 duration 避免视口右边沿跳到 0
+  // paused 状态切换时更新视口，使红线保持居中
   // 用 useLayoutEffect 在绘制前同步修正 seekTime，避免闪烁
   useLayoutEffect(() => {
-    updateSeekTime(Math.max(durationRef.current, currentTimeRef.current ?? 0))
+    updateSeekTime(recordingViewportEnd(currentTimeRef.current ?? 0, durationRef.current))
   }, [paused])
 
   const minMidi = noteNameToMidi(minNote)
@@ -108,16 +119,21 @@ export function PitchChart({
 
   // 时间窗口计算
   // - seekable + paused：视口右边沿 = seekTime（用户拖拽直接改这个值）
-  // - seekable + playing（历史播放）：跟随 currentTime
-  // - 非 seekable（录音中）：跟随 currentTime，同时兼顾数据末尾
-  const dataLatestTime = data.length > 0 ? data[data.length - 1].time : 0
-  const now = (seekable && paused)
-    ? seekTime
-    : seekable
-      ? Math.max(duration, currentTime ?? 0)
-      : Math.max(duration, Math.max(currentTime ?? 0, dataLatestTime))
-  const startTime = Math.max(0, now - duration)
-  const endTime = now
+  // - seekable + playing（历史播放）：跟随 currentTime，右边沿对齐
+  // - 非 seekable（录音中）：红线居中，视口以 currentTime 为轴心，右半可预览模板后续内容
+  let startTime: number
+  let endTime: number
+  if (seekable && paused) {
+    startTime = Math.max(0, seekTime - duration)
+    endTime = seekTime
+  } else if (seekable) {
+    const now = Math.max(duration, currentTime ?? 0)
+    startTime = Math.max(0, now - duration)
+    endTime = now
+  } else {
+    endTime = recordingViewportEnd(currentTime ?? 0, duration)
+    startTime = Math.max(0, endTime - duration)
+  }
 
   // PanResponder：竖向始终可用；横向仅 seekable=true 且 paused=true 时生效
   const panResponder = useRef(
@@ -134,12 +150,12 @@ export function PitchChart({
           if (Math.abs(dx) > Math.abs(dy)) directionLock.current = 'horizontal'
           else directionLock.current = 'vertical'
         }
-        if (directionLock.current === 'horizontal' && seekableRef.current && pausedRef.current) {
+        if (directionLock.current === 'horizontal' && seekableRef.current && pausedRef.current && Math.abs(dx) > 8) {
           const secsPerPixel = durationRef.current / (windowWidthRef.current - 20)
           // 向右拖（dx > 0）= 往历史看 = seekTime 减小
           const newSeekTime = panStartSeekTime.current - dx * secsPerPixel
           const minSeekTime = durationRef.current  // 最多看到 time=0
-          const maxSeekTime = Math.max(durationRef.current, currentTimeRef.current ?? 0)
+          const maxSeekTime = recordingViewportEnd(currentTimeRef.current ?? 0, durationRef.current)
           const clamped = Math.max(minSeekTime, Math.min(newSeekTime, maxSeekTime))
           updateSeekTime(clamped)
           const newStartTime = Math.max(0, clamped - durationRef.current)
