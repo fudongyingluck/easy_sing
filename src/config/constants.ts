@@ -21,13 +21,6 @@ export const CONFIG = {
   // 模式
   MAX_CUSTOM_MODES: 20,            // 最多20个自定义模式
 
-  // YIN算法
-  YIN_THRESHOLD: 0.15,
-  YIN_SAMPLE_RATE: 22050,
-  YIN_BUFFER_SIZE: 2048,
-  YIN_OVERLAP: 0.5,
-  YIN_CONFIDENCE_THRESHOLD: 0.85,
-
   // 音频模式配置
   FORCE_REAL_AUDIO: true,         // 设置为 true 可以在模拟器上尝试使用真实麦克风
 } as const

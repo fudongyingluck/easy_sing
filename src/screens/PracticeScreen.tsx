@@ -12,6 +12,7 @@ import { loadTemplates, loadTemplatePitchData, resolveTemplateAudioPath } from '
 import { UserSettings, AppMode, RecordingState, Recording, PitchTemplate, PitchDataPoint } from '../types'
 import { freqToMidi, midiToNoteName, noteNameToMidi } from '../utils/noteUtils'
 import { PRESET_MODES, CONFIG } from '../config/constants'
+import { useDoubleTap } from '../utils/doubleTap'
 import { useTheme } from '../context/ThemeContext'
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
@@ -46,7 +47,6 @@ export function PracticeScreen({ navigation }: any) {
   const [templateModalVisible, setTemplateModalVisible] = useState(false)
 
   const recordingTimerRef = useRef<any>(null)
-  const lastTapTimeRef = useRef<number>(0)
   const templateSoundRef = useRef<any>(null)
 
   // 耳机断开时停止所有音频（钢琴 + 模板），防止 iOS 路由切换触发重播
@@ -182,30 +182,6 @@ export function PracticeScreen({ navigation }: any) {
     templateSoundRef.current = sound
   }
 
-  // 双击处理（音域区或钢琴区域）
-  const handleDoubleTap = () => {
-    const currentTime = Date.now()
-    const timeDiff = currentTime - lastTapTimeRef.current
-
-    if (timeDiff < CONFIG.DOUBLE_TAP_DELAY && timeDiff > 0) {
-      // 检测到双击
-      if (recordingState === 'recording') {
-        // 正在录音时，只暂停录音（和暂停按钮效果一样）
-        pauseRecording()
-      } else {
-        // 不在录音时，切换模式
-        toggleAppMode()
-      }
-      lastTapTimeRef.current = 0
-    } else {
-      // 记录点击时间
-      lastTapTimeRef.current = currentTime
-    }
-  }
-
-  // 双击音域区
-  const handleRangeAreaTap = handleDoubleTap
-
   const toggleAppMode = useCallback(() => {
     if (appMode === 'recording') {
       if (recordingState === 'recording') {
@@ -309,6 +285,20 @@ export function PracticeScreen({ navigation }: any) {
       console.error('Failed to pause recording:', error)
     }
   }
+
+  // 双击处理（音域区或钢琴区域）
+  const { handleTap: handleDoubleTap } = useDoubleTap(
+    useCallback(() => {
+      if (recordingState === 'recording') {
+        pauseRecording()
+      } else {
+        toggleAppMode()
+      }
+    }, [recordingState, pauseRecording, toggleAppMode])
+  )
+
+  // 双击音域区
+  const handleRangeAreaTap = handleDoubleTap
 
   // 继续录音
   const resumeRecording = async () => {

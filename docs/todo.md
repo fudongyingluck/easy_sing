@@ -2,6 +2,37 @@
 
 ---
 
+## 重构执行顺序
+
+> 目标：在不破坏已有功能的前提下，逐步改善代码质量。
+> 原则：先建安全网，再动核心逻辑；低风险改动先行，高风险重构后置。
+
+### 阶段一：修复测试基础设施（前提条件）
+1. 修复 Jest 配置，解决 ESM 模块（`@react-native-async-storage` 等）transform 问题，让测试能跑起来
+2. 更新 `PitchChart.test.tsx` 对齐新的视口行为（红线居中逻辑），让现有测试通过
+
+### 阶段二：低风险清理（零逻辑改动，可随时做）
+对应 code_fix_1 中不涉及逻辑变更的条目，逐条独立提交：
+- **CF1-7**：删除 `CONFIG` 里未使用的 YIN 常量（纯删除）
+- **CF1-6**：`PitchCanvas.tsx` 里的 `freqToMidi` 改为 import `noteUtils.ts` 的版本（纯替换，逻辑不变）
+- **CF1-5**：`PracticeScreen` 改用 `useDoubleTap` Hook，或删除 `doubleTap.ts`（二选一）
+
+### 阶段三：补关键单测（重构前的安全网）
+在动核心逻辑之前，先给以下模块补测试：
+- `noteUtils.ts`：freqToMidi / midiToNoteName / noteNameToMidi / getCentsDeviation（纯函数，最好写）
+- `AudioService`：startRecording / pauseRecording / resumeRecording / stopRecording 的状态流转
+- `PracticeScreen` 录音状态机：idle → recording → paused → idle 的关键路径
+
+### 阶段四：中风险重构（有测试保护后再做）
+- **CF1-4**：统一路径解析逻辑到单一出口
+- **CF1-3**：AudioService 录音/回放职责拆分（或命名空间隔离）
+
+### 阶段五：高风险重构（最后做）
+- **CF1-1**：PracticeScreen 拆分 `useRecording` / `useTemplateAudio` Hook
+- **CF1-2**：模板音频纳入统一音频管理路径
+
+---
+
 ## Bug 列表
 
 ### 0. 录音中音高曲线和音频周期性掉段（待定位）

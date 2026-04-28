@@ -99,9 +99,10 @@ describe('rendering', () => {
 // 2. 时间窗口 — playing
 // ─────────────────────────────────────────────────────────────────────────────
 describe('时间窗口（playing）', () => {
-  it('数据比 currentTime 新时，endTime 跟随数据最新时间', () => {
+  it('录音中红线居中：endTime = max(duration, currentTime + duration/2)', () => {
+    // currentTime=3, duration=6 → recordingViewportEnd = max(6, 3+3) = 6
     render(<PitchChart {...BASE_PROPS} currentTime={3} paused={false} />)
-    expect(lastPitchCanvasProps.endTime).toBeGreaterThanOrEqual(10)
+    expect(lastPitchCanvasProps.endTime).toBeCloseTo(6, 5)
   })
 
   it('currentTime 超过数据时，endTime 跟随 currentTime', () => {
@@ -129,10 +130,10 @@ describe('时间窗口（playing）', () => {
 // 3. 时间窗口 — paused + seekable
 // ─────────────────────────────────────────────────────────────────────────────
 describe('时间窗口（paused + seekable）', () => {
-  it('未拖动时视口显示数据末尾', () => {
+  it('未拖动时视口以 currentTime 为中心（endTime = recordingViewportEnd）', () => {
+    // currentTime=10, duration=6 → recordingViewportEnd = max(6, 10+3) = 13
     render(<PitchChart {...BASE_PROPS} currentTime={10} paused seekable />)
-    // 数据到 t=10，endTime 应接近 10
-    expect(lastPitchCanvasProps.endTime).toBeCloseTo(10, 0)
+    expect(lastPitchCanvasProps.endTime).toBeCloseTo(13, 0)
   })
 
   it('向右拖（dx > 0）视口向历史方向移动，startTime 减小', () => {
@@ -155,12 +156,13 @@ describe('时间窗口（paused + seekable）', () => {
     expect(lastPitchCanvasProps.startTime).toBeGreaterThanOrEqual(0)
   })
 
-  it('endTime 不超过数据最新时间（拖不到未来）', () => {
+  it('endTime 不超过 recordingViewportEnd（拖不到未来）', () => {
+    // currentTime=10, duration=6 → maxSeekTime = recordingViewportEnd = 13
     render(<PitchChart {...BASE_PROPS} currentTime={10} paused seekable />)
     simulatePan(-99999, 0) // 向左拖（往未来方向）
 
     render(<PitchChart {...BASE_PROPS} currentTime={10} paused seekable />)
-    expect(lastPitchCanvasProps.endTime).toBeLessThanOrEqual(10 + 0.01)
+    expect(lastPitchCanvasProps.endTime).toBeLessThanOrEqual(13 + 0.01)
   })
 })
 

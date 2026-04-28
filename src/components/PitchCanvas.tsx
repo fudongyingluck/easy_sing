@@ -2,7 +2,7 @@ import React, { memo, useRef } from 'react'
 import { View, StyleSheet, Text } from 'react-native'
 import Svg, { Line, Text as SvgText, Path, Circle, Rect, Defs, LinearGradient, Stop, ClipPath, G } from 'react-native-svg'
 import { PitchDataPoint } from '../types'
-import { noteNameToMidi, midiToNoteName } from '../utils/noteUtils'
+import { noteNameToMidi, midiToNoteName, freqToMidi } from '../utils/noteUtils'
 import { useTheme } from '../context/ThemeContext'
 
 export const X_AXIS_HEIGHT = 30
@@ -41,8 +41,6 @@ function formatTimeLabel(s: number): string {
   if (s >= 60) return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
   return `${s}`
 }
-
-const freqToMidi = (freq: number) => 12 * Math.log2(freq / 440) + 69
 
 // 二分查找：找到第一个 data[i].time >= target 的位置
 function bisectLeft(data: PitchDataPoint[], target: number): number {
