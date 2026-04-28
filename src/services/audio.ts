@@ -2,31 +2,27 @@ import { PitchData, PitchDataPoint } from '../types'
 import { midiToNoteName } from '../utils/noteUtils'
 import { nativePitchRecorder } from './nativePitchRecorder'
 import { audioPlayer } from '../utils/audioUtils'
+import { resolveAudioPath } from './storage'
 import { NativeModules } from 'react-native'
 import { CONFIG } from '../config/constants'
 
 const DEFAULT_MAX_DURATION = CONFIG.MAX_RECORDING_DURATION
 
-/**
- * 解析音频文件的当前有效绝对路径。
- *
- * ⚠️ 不要绕过这个函数直接使用存储的路径：
- *   - 录音文件存的是创建时的绝对路径，iOS 沙盒 UUID 会随应用更新/重装变化，直接使用会导致"operation couldn't be completed"报错
- *   - 必须通过 resolveRecordingPath 动态定位当前路径
- *
- * 规则：
- *   - 包含 /Imports/ 的路径（从外部导入的模板文件）→ 直接返回，路径由我们自己写入沙盒，始终有效
- *   - 其他路径（录音文件）→ 提取文件名，走 resolveRecordingPath 获取当前有效路径
- */
-async function resolveAudioPath(filePath: string): Promise<string> {
-  if (filePath.includes('/Imports/')) {
-    return filePath
-  }
-  const filename = filePath.split('/').pop() ?? filePath
-  return nativePitchRecorder.resolveRecordingPath(filename)
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
+// AudioService
+//
+// 职责划分（两个独立关注点，互不交叉）：
+//
+//   [Recording]  startRecording / pauseRecording / resumeRecording / stopRecording
+//                onPitchEvent → pitchData 收集 → onPitchDataUpdate 回调
+//
+//   [Playback]   playAudio / pausePlayback / resumePlayback / stopPlayback / seekTo
+//
+// 唯一耦合点：startRecording 开始前调用 stopPlayback 确保音频 session 干净。
+// ─────────────────────────────────────────────────────────────────────────────
 export class AudioService {
+
+  // ── Recording state ───────────────────────────────────────────────────────
   private recordingId: string | null = null
   private pitchData: PitchDataPoint[] = []
   private recordingStartTime: number = 0
@@ -34,18 +30,30 @@ export class AudioService {
   private pauseStartTime: number = 0
   private isRecording: boolean = false
   private isPaused: boolean = false
-  private onPitchDataUpdate: ((data: PitchDataPoint[]) => void) | null = null
-  private onMaxDurationReached: (() => void) | null = null
-
   private pitchSubscription: any = null
   private maxDurationInterval: any = null
   private pitchWindow: number[] = []
   private lastPitchUpdateTime: number = 0
+  private onPitchDataUpdate: ((data: PitchDataPoint[]) => void) | null = null
+  private onMaxDurationReached: (() => void) | null = null
 
-  // 播放
+  // ── Playback state ────────────────────────────────────────────────────────
   private playbackSound: any = null
   private playbackTimer: any = null
   private playbackResolve: (() => void) | null = null
+
+  // ── Session helpers ───────────────────────────────────────────────────────
+
+  /**
+   * ⚠️ 唯一允许调用 resetForPlayback 的入口。
+   * 必须先 release 所有钢琴 Sound 对象，否则 iOS 在 session 重激活时会自动恢复它们的播放。
+   */
+  private activatePlaybackSession(): void {
+    audioPlayer.release()
+    NativeModules.AudioSessionModule?.resetForPlayback?.()
+  }
+
+  // ── Recording callbacks ───────────────────────────────────────────────────
 
   setOnPitchDataUpdate(callback: ((data: PitchDataPoint[]) => void) | null) {
     this.onPitchDataUpdate = callback
@@ -55,18 +63,14 @@ export class AudioService {
     this.onMaxDurationReached = callback
   }
 
-  /**
-   * ⚠️ 唯一允许调用 resetForPlayback 的入口。
-   * 必须先 release 所有钢琴 Sound 对象，否则 iOS 在 session 重激活时会自动恢复它们的播放。
-   * 禁止在其他地方直接调用 NativeModules.AudioSessionModule?.resetForPlayback?.()
-   */
-  private activatePlaybackSession(): void {
-    audioPlayer.release()
-    NativeModules.AudioSessionModule?.resetForPlayback?.()
-  }
+  // ═════════════════════════════════════════════════════════════════════════
+  // Recording
+  // ═════════════════════════════════════════════════════════════════════════
 
   async startRecording(durationLimit: number = DEFAULT_MAX_DURATION, detectionRate: number = 100): Promise<string> {
-    await this.stopAll()
+    // 先停掉所有回放，确保 audio session 干净
+    this.stopPlayback()
+    this._stopRecordingListeners()
 
     this.recordingId = `rec_${Date.now()}`
     this.pitchData = []
@@ -124,10 +128,17 @@ export class AudioService {
       this.pauseStartTime = 0
     }
 
-    // 在调用 stopAll() 之前记录时长，避免 stopDetection 耗时被计入 duration
+    // 在停止 native 之前记录时长，避免 stopDetection 耗时被计入 duration
     const duration = (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
 
-    const audioPath = await this.stopAll()
+    this._stopRecordingListeners()
+    const [filename, dir] = await Promise.all([
+      nativePitchRecorder.stopRecording(),
+      nativePitchRecorder.getRecordingsDirectory(),
+    ])
+    await nativePitchRecorder.stopDetection()
+    const audioPath = filename ? `${dir}/${filename}` : ''
+
     this.isRecording = false
     this.isPaused = false
     NativeModules.AudioSessionModule?.deactivate?.()
@@ -138,9 +149,18 @@ export class AudioService {
       pitchData: {
         version: 1,
         duration: Math.round(duration),
-        data: this.pitchData
-      }
+        data: this.pitchData,
+      },
     }
+  }
+
+  getRecordingElapsed(): number {
+    if (!this.isRecording) return 0
+    return (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
+  }
+
+  getCurrentPitchData(): PitchDataPoint[] {
+    return [...this.pitchData]
   }
 
   private onPitchEvent(freq: number) {
@@ -167,8 +187,8 @@ export class AudioService {
     }
   }
 
-  private async stopAll(): Promise<string> {
-    this.stopPlayback()
+  /** 停止 pitch 订阅和时长限制计时器，不停 native engine */
+  private _stopRecordingListeners(): void {
     if (this.pitchSubscription) {
       this.pitchSubscription.remove()
       this.pitchSubscription = null
@@ -177,13 +197,11 @@ export class AudioService {
       clearInterval(this.maxDurationInterval)
       this.maxDurationInterval = null
     }
-    const [filename, dir] = await Promise.all([
-      nativePitchRecorder.stopRecording(),
-      nativePitchRecorder.getRecordingsDirectory(),
-    ])
-    await nativePitchRecorder.stopDetection()
-    return filename ? `${dir}/${filename}` : ''
   }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Playback
+  // ═════════════════════════════════════════════════════════════════════════
 
   async playAudio(filePath: string, onProgress?: (time: number) => void, startTime?: number): Promise<void> {
     this.stopPlayback()
@@ -199,7 +217,6 @@ export class AudioService {
     return new Promise((resolve, reject) => {
       const sound = new Sound(resolvedPath, '', (error: any) => {
         if (error) {
-          // loading 失败：若 sound 还是当前 active，清理掉
           if (this.playbackSound === sound) this._clearPlayback()
           sound.release()
           reject(error)
@@ -224,7 +241,6 @@ export class AudioService {
         }
 
         sound.play(() => {
-          // stopPlayback 已处理过（playbackSound 不再是 sound）则直接返回，避免重复 deactivate
           if (this.playbackSound !== sound) return
           sound.release()
           this._clearPlayback()
@@ -245,7 +261,6 @@ export class AudioService {
       this.playbackTimer = null
     }
     // 不调 deactivate：deactivate 会触发 iOS 音频中断，导致 react-native-sound 完成回调异常触发
-    // deactivate 只在完全停止（stopPlayback）时执行
   }
 
   resumePlayback(onProgress?: (time: number) => void): void {
@@ -259,7 +274,7 @@ export class AudioService {
     }
     const resumedSound = this.playbackSound
     resumedSound.play(() => {
-      if (this.playbackSound !== resumedSound) return  // 已被 stopPlayback 处理
+      if (this.playbackSound !== resumedSound) return
       resumedSound.release()
       this._clearPlayback()
       NativeModules.AudioSessionModule?.deactivate?.()
@@ -273,7 +288,7 @@ export class AudioService {
       this.playbackSound.release()
       NativeModules.AudioSessionModule?.deactivate?.()
     }
-    this.playbackResolve?.()  // 释放挂起的 Promise，确保 async 调用链正常结束
+    this.playbackResolve?.()
     this._clearPlayback()
   }
 
@@ -292,15 +307,6 @@ export class AudioService {
     }
     this.playbackSound = null
     this.playbackResolve = null
-  }
-
-  getRecordingElapsed(): number {
-    if (!this.isRecording) return 0
-    return (Date.now() - this.recordingStartTime - this.totalPausedTime) / 1000
-  }
-
-  getCurrentPitchData(): PitchDataPoint[] {
-    return [...this.pitchData]
   }
 }
 

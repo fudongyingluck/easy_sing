@@ -12,6 +12,11 @@
 
 // ─── Mocks ─────────────────────────────────────────────────────────────────
 
+// storage.ts 引入了 AsyncStorage 和 nativePitchRecorder，直接 mock 整个模块避免 native 依赖
+jest.mock('../../src/services/storage', () => ({
+  resolveAudioPath: jest.fn().mockImplementation((p: string) => Promise.resolve(p)),
+}))
+
 let pitchCallback: ((arg: { freq: number }) => void) | null = null
 
 jest.mock('react-native', () => ({

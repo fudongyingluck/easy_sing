@@ -35,6 +35,7 @@ jest.mock('react-native', () => {
   const rn = jest.requireActual('react-native')
   rn.useWindowDimensions = () => ({ width: 390, height: 844 })
   rn.NativeModules.AudioSessionModule = {}
+  rn.NativeModules.PitchDetectorModule = { addListener: jest.fn(), removeListeners: jest.fn() }
   // PanResponder is a lazy getter with no setter — use defineProperty to override
   Object.defineProperty(rn, 'PanResponder', {
     value: {
