@@ -1,26 +1,25 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Alert, Linking, Modal, NativeModules, NativeEventEmitter } from 'react-native'
+import React, { useState, useEffect, useCallback } from 'react'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Modal, NativeModules, NativeEventEmitter } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Ionicons from 'react-native-vector-icons/Ionicons'
-import RNFS from 'react-native-fs'
 import { PitchChart } from '../components/PitchChart'
 import { Piano } from '../components/Piano'
-import { audioService } from '../services/audio'
 import { audioPlayer } from '../utils/audioUtils'
-import { loadUserSettings, saveRecordings, savePitchData, loadRecordings } from '../services/storage'
-import { loadTemplates, loadTemplatePitchData, resolveTemplateAudioPath } from '../services/templateStorage'
-import { UserSettings, AppMode, RecordingState, Recording, PitchTemplate, PitchDataPoint } from '../types'
-import { freqToMidi, midiToNoteName, noteNameToMidi } from '../utils/noteUtils'
+import { loadUserSettings } from '../services/storage'
+import { AppMode } from '../types'
 import { PRESET_MODES, CONFIG } from '../config/constants'
 import { useDoubleTap } from '../utils/doubleTap'
 import { useTheme } from '../context/ThemeContext'
+import { useRecording } from '../hooks/useRecording'
+import { useTemplateAudio } from '../hooks/useTemplateAudio'
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
+const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 
 export function PracticeScreen({ navigation }: any) {
   const { colors } = useTheme()
+
+  // ── User settings ─────────────────────────────────────────────────────────
   const [appMode, setAppMode] = useState<AppMode>('recording')
-  const [recordingState, setRecordingState] = useState<RecordingState>('idle')
   const [currentModeId, setCurrentModeId] = useState<string>('female')
   const [customModes, setCustomModes] = useState<any[]>([])
   const [leftYAxisDisplay, setLeftYAxisDisplay] = useState<'english' | 'solfege' | 'number'>('english')
@@ -28,58 +27,47 @@ export function PracticeScreen({ navigation }: any) {
   const [showBothYAxes, setShowBothYAxes] = useState(true)
   const [recordingDurationLimit, setRecordingDurationLimit] = useState(600)
   const [pitchDetectionRate, setPitchDetectionRate] = useState<number>(100)
-  const [reachedDurationLimit, setReachedDurationLimit] = useState(false)
-  const [recordingId, setRecordingId] = useState<string | null>(null)
-  const [recordingDuration, setRecordingDuration] = useState(0)
-  const [pitchData, setPitchData] = useState<any[]>([])
-  const [recordingTime, setRecordingTime] = useState(0)
-
+  const [rememberLastTemplate, setRememberLastTemplate] = useState(false)
   const [pianoExpanded, setPianoExpanded] = useState(true)
   const [chartAreaHeight, setChartAreaHeight] = useState(SCREEN_HEIGHT * 5 / 12)
 
-  const [rememberLastTemplate, setRememberLastTemplate] = useState(false)
+  // ── Template audio ─────────────────────────────────────────────────────────
+  const templateAudio = useTemplateAudio({ currentModeId, customModes })
 
-  // 模板相关
-  const [templates, setTemplates] = useState<PitchTemplate[]>([])
-  const [selectedTemplate, setSelectedTemplate] = useState<PitchTemplate | null>(null)
-  const [templatePitchData, setTemplatePitchData] = useState<PitchDataPoint[]>([])
-  const [templateAudioPath, setTemplateAudioPath] = useState<string>('')
-  const [templateModalVisible, setTemplateModalVisible] = useState(false)
+  // ── Recording ──────────────────────────────────────────────────────────────
+  const recording = useRecording({
+    recordingDurationLimit,
+    pitchDetectionRate,
+    hasTemplate: !!templateAudio.selectedTemplate,
+    onAfterStart: () => {
+      if (templateAudio.selectedTemplate) {
+        templateAudio.startTemplateAudio(templateAudio.selectedTemplate)
+      }
+    },
+    onPause: templateAudio.pauseTemplateAudio,
+    onResume: templateAudio.resumeTemplateAudio,
+    onStop: templateAudio.stopTemplateSound,
+  })
 
-  const recordingTimerRef = useRef<any>(null)
-  const templateSoundRef = useRef<any>(null)
-
-  // 耳机断开时停止所有音频（钢琴 + 模板），防止 iOS 路由切换触发重播
+  // ── Headphones disconnected ────────────────────────────────────────────────
   useEffect(() => {
     const emitter = new NativeEventEmitter(NativeModules.AudioSessionModule)
     const sub = emitter.addListener('onHeadphonesDisconnected', () => {
       audioPlayer.stopAll()
-      if (templateSoundRef.current) {
-        templateSoundRef.current.pause()
-      }
+      templateAudio.pauseTemplateAudio()
     })
     return () => sub.remove()
-  }, [])
+  }, [templateAudio.pauseTemplateAudio])
 
-  // 组件卸载时清理 timer 和 audioService 回调，防止内存泄漏
+  // ── Unmount cleanup ────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current)
-        recordingTimerRef.current = null
-      }
-      audioService.setOnPitchDataUpdate(null)
-      audioService.setOnMaxDurationReached(null)
-      audioService.stopPlayback()
-      if (templateSoundRef.current) {
-        templateSoundRef.current.stop()
-        templateSoundRef.current.release()
-        templateSoundRef.current = null
-      }
+      recording.cleanup()
+      templateAudio.stopTemplateSound()
     }
   }, [])
 
-  // 每次切换回练习 Tab 时重新加载设置
+  // ── Settings + focus listener ──────────────────────────────────────────────
   useEffect(() => {
     const loadData = async () => {
       const settings = await loadUserSettings()
@@ -95,342 +83,52 @@ export function PracticeScreen({ navigation }: any) {
     loadData()
     const unsubscribeFocus = navigation.addListener('focus', async () => {
       loadData()
-      // 检查已选模板是否仍存在
-      const list = await loadTemplates()
-      setTemplates(list)
-      if (selectedTemplate) {
-        const still = list.find(t => t.id === selectedTemplate.id)
-        if (!still) { setSelectedTemplate(null); setTemplatePitchData([]); setTemplateAudioPath('') }
-        else if (still.name !== selectedTemplate.name) setSelectedTemplate(still)
-      }
+      await templateAudio.reloadTemplates(templateAudio.selectedTemplate)
     })
     const unsubscribeBlur = navigation.addListener('blur', () => {
-      if (recordingState === 'recording') pauseRecording()
+      if (recording.recordingState === 'recording') recording.pauseRecording()
     })
     return () => { unsubscribeFocus(); unsubscribeBlur() }
-  }, [navigation, recordingState, selectedTemplate])
+  }, [navigation, recording.recordingState])
 
-  const openTemplateModal = async () => {
-    const list = await loadTemplates()
-    setTemplates(list)
-    setTemplateModalVisible(true)
-  }
+  // ── Save: reset template if not remembered ─────────────────────────────────
+  const saveAndStop = useCallback(async () => {
+    await recording.saveAndStopRecording()
+    if (!rememberLastTemplate) templateAudio.resetTemplate()
+  }, [recording.saveAndStopRecording, rememberLastTemplate, templateAudio.resetTemplate])
 
-  const selectTemplate = async (template: PitchTemplate | null) => {
-    setTemplateModalVisible(false)
-    if (!template) { setSelectedTemplate(null); setTemplatePitchData([]); setTemplateAudioPath(''); return }
-
-    // 检查模板音高范围是否超出当前练习模式
-    if (template.minNote && template.maxNote) {
-      const allModes = [...PRESET_MODES, ...customModes]
-      const mode = allModes.find(m => m.id === currentModeId) || PRESET_MODES[0]
-      const modeMidi = { min: noteNameToMidi(mode.startNote), max: noteNameToMidi(mode.endNote) }
-      const tmplMidi = { min: noteNameToMidi(template.minNote), max: noteNameToMidi(template.maxNote) }
-      const outOfRange = tmplMidi.min < modeMidi.min || tmplMidi.max > modeMidi.max
-      if (outOfRange) {
-        const confirmed = await new Promise<boolean>(resolve => {
-          Alert.alert(
-            '模版使用确认',
-            `模板音高范围（${template.minNote}–${template.maxNote}）超出当前练习范围（${mode.startNote}–${mode.endNote}），超出部分将不展示。`,
-            [
-              { text: '取消', style: 'cancel', onPress: () => resolve(false) },
-              { text: '继续', onPress: () => resolve(true) },
-            ]
-          )
-        })
-        if (!confirmed) return
-      }
-    }
-
-    setSelectedTemplate(template)
-    const loaded = await loadTemplatePitchData(template.pitchDataKey)
-    setTemplatePitchData(loaded?.data ?? [])
-    const audioPath = await resolveTemplateAudioPath(template)
-    setTemplateAudioPath(audioPath)
-  }
-
-  // 停止并释放模板音频
-  const stopTemplateSound = () => {
-    if (templateSoundRef.current) {
-      templateSoundRef.current.stop()
-      templateSoundRef.current.release()
-      templateSoundRef.current = null
-    }
-  }
-
-  // 开始播放模板音频（在录音开始后调用）
-  const startTemplateAudio = (template: PitchTemplate) => {
-    stopTemplateSound()
-    const path = templateAudioPath
-    if (!path) return
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const SoundModule = require('react-native-sound')
-    const Sound = SoundModule.default ?? SoundModule
-    const sound = new Sound(path, '', (error: any) => {
-      if (error || templateSoundRef.current !== sound) {
-        sound.release()
-        return
-      }
-      sound.play(() => {
-        // 播完后静默释放，不影响录音
-        if (templateSoundRef.current === sound) {
-          sound.release()
-          templateSoundRef.current = null
-        }
-      })
-    })
-    templateSoundRef.current = sound
-  }
-
+  // ── App mode ───────────────────────────────────────────────────────────────
   const toggleAppMode = useCallback(() => {
     if (appMode === 'recording') {
-      if (recordingState === 'recording') {
-        // 正在录音，先暂停
-        pauseRecording()
-      }
+      if (recording.recordingState === 'recording') recording.pauseRecording()
       setAppMode('piano')
     } else {
-      if (recordingState === 'paused') {
-        // 恢复录音
-        resumeRecording()
-      }
+      if (recording.recordingState === 'paused') recording.resumeRecording()
       setAppMode('recording')
     }
-  }, [appMode, recordingState])
+  }, [appMode, recording.recordingState, recording.pauseRecording, recording.resumeRecording])
 
-  // 开始录音
-  const startRecording = async () => {
-    try {
-      console.log('[Button] 开始录音')
-
-      // 有模板时检查耳机，避免模板音频被麦克风拾入录音
-      if (selectedTemplate) {
-        const connected: boolean = await NativeModules.PitchDetectorModule?.isHeadphonesConnected?.() ?? false
-        if (!connected) {
-          const proceed = await new Promise<boolean>(resolve => {
-            Alert.alert(
-              '未检测到耳机',
-              '建议佩戴耳机。模板音频外放会干扰麦克风，影响音高检测准确性。是否继续？',
-              [
-                { text: '取消', style: 'cancel', onPress: () => resolve(false) },
-                { text: '继续', onPress: () => resolve(true) },
-              ]
-            )
-          })
-          if (!proceed) return
-        }
-      }
-
-      setPitchData([])
-
-      // 设置音高数据更新回调
-      audioService.setOnPitchDataUpdate((data) => {
-        setPitchData(data)
-      })
-
-      // 设置最大时长到达回调
-      setReachedDurationLimit(false)
-      audioService.setOnMaxDurationReached(() => {
-        if (recordingTimerRef.current) {
-          clearInterval(recordingTimerRef.current)
-          recordingTimerRef.current = null
-        }
-        setReachedDurationLimit(true)
-        setRecordingState('paused')
-        audioService.pauseRecording().catch(console.error)
-        if (templateSoundRef.current) templateSoundRef.current.pause()
-      })
-
-      const id = await audioService.startRecording(recordingDurationLimit, pitchDetectionRate)
-      setRecordingId(id)
-      setRecordingState('recording')
-      setRecordingTime(0)
-
-      // 启动录音计时（100ms 精度，与音高数据使用同一时间源）
-      recordingTimerRef.current = setInterval(() => {
-        setRecordingTime(audioService.getRecordingElapsed())
-      }, 100)
-
-      // 开始同步播放模板音频
-      if (selectedTemplate) startTemplateAudio(selectedTemplate)
-    } catch (error: any) {
-      if (error?.code === 'permission_denied_settings') {
-        Alert.alert(
-          '需要麦克风权限',
-          '请前往设置开启麦克风权限，才能使用录音功能。',
-          [
-            { text: '取消', style: 'cancel' },
-            { text: '去设置', onPress: () => Linking.openURL('app-settings:') },
-          ]
-        )
-      } else if (error?.code === 'permission_denied') {
-        // 第一次拒绝，静默处理
-      } else {
-        console.error('Failed to start recording:', error)
-      }
-    }
-  }
-
-  // 暂停录音
-  const pauseRecording = async () => {
-    try {
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current)
-        recordingTimerRef.current = null
-      }
-      await audioService.pauseRecording()
-      setRecordingState('paused')
-      if (templateSoundRef.current) templateSoundRef.current.pause()
-    } catch (error) {
-      console.error('Failed to pause recording:', error)
-    }
-  }
-
-  // 双击处理（音域区或钢琴区域）
+  // ── Double tap ─────────────────────────────────────────────────────────────
   const { handleTap: handleDoubleTap } = useDoubleTap(
     useCallback(() => {
-      if (recordingState === 'recording') {
-        pauseRecording()
+      if (recording.recordingState === 'recording') {
+        recording.pauseRecording()
       } else {
         toggleAppMode()
       }
-    }, [recordingState, pauseRecording, toggleAppMode])
+    }, [recording.recordingState, recording.pauseRecording, toggleAppMode])
   )
 
-  // 双击音域区
   const handleRangeAreaTap = handleDoubleTap
 
-  // 继续录音
-  const resumeRecording = async () => {
-    try {
-      console.log('[Button] 继续录音')
-      await audioService.resumeRecording()
-      setRecordingState('recording')
+  // ── Current mode ───────────────────────────────────────────────────────────
+  const currentMode = [...PRESET_MODES, ...customModes].find(m => m.id === currentModeId) || PRESET_MODES[0]
 
-      // 重新启动录音计时（100ms 精度，与音高数据使用同一时间源）
-      recordingTimerRef.current = setInterval(() => {
-        setRecordingTime(audioService.getRecordingElapsed())
-      }, 100)
-
-      // 继续播放模板音频（从暂停位置恢复）
-      if (templateSoundRef.current) {
-        templateSoundRef.current.play(() => {
-          if (templateSoundRef.current) {
-            templateSoundRef.current.release()
-            templateSoundRef.current = null
-          }
-        })
-      }
-    } catch (error) {
-      console.error('Failed to resume recording:', error)
-    }
-  }
-
-  // 保存录音
-  const saveAndStopRecording = async () => {
-    try {
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current)
-        recordingTimerRef.current = null
-      }
-
-      stopTemplateSound()
-      audioService.stopPlayback()
-      audioService.setOnPitchDataUpdate(null)
-      audioService.setOnMaxDurationReached(null)
-      const result = await audioService.stopRecording()
-      setRecordingState('idle')
-      setRecordingDuration(result.duration)
-
-      // 保存录音
-      const newRecording: Recording = {
-        id: recordingId!,
-        name: new Date().toLocaleString('zh-CN', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit'
-        }).replace(/\//g, '-'),
-        audioFilePath: result.audioPath,
-        pitchDataKey: await savePitchData(recordingId!, result.pitchData),
-        duration: result.duration,
-        fileSize: 0, // TODO: 获取文件大小
-        createTime: new Date().toISOString()
-      }
-
-      // 更新录音列表
-      const recordings = await loadRecordings()
-      recordings.unshift(newRecording)
-      await saveRecordings(recordings)
-
-      // 重置状态
-      setRecordingId(null)
-      setRecordingTime(0)
-      setPitchData([])
-      if (!rememberLastTemplate) {
-        setSelectedTemplate(null)
-        setTemplatePitchData([])
-        setTemplateAudioPath('')
-      }
-
-    } catch (error) {
-      console.error('Failed to save recording:', error)
-    }
-  }
-
-  // 放弃录音
-  const discardRecording = async () => {
-    try {
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current)
-        recordingTimerRef.current = null
-      }
-
-      stopTemplateSound()
-      audioService.stopPlayback()
-
-      audioService.setOnPitchDataUpdate(null)
-      audioService.setOnMaxDurationReached(null)
-      const result = await audioService.stopRecording()
-      const audioPathToDelete = result.audioPath
-
-      // 删除音频文件
-      if (audioPathToDelete) {
-        try {
-          const exists = await RNFS.exists(audioPathToDelete)
-          if (exists) await RNFS.unlink(audioPathToDelete)
-        } catch (e) {
-          console.warn('Failed to delete audio file:', e)
-        }
-      }
-
-      // 重置状态
-      setRecordingState('idle')
-      setRecordingId(null)
-      setRecordingTime(0)
-      setPitchData([])
-
-    } catch (error) {
-      console.error('Failed to discard recording:', error)
-    }
-  }
-
-  // 获取当前模式
-  const getCurrentMode = () => {
-    const allModes = [...PRESET_MODES, ...customModes]
-    return allModes.find(m => m.id === currentModeId) || PRESET_MODES[0]
-  }
-
-  const currentMode = getCurrentMode()
-
-  // 处理钢琴按键
-  const handlePianoKeyPress = (note: string, freq: number) => {
-    console.log(`Piano key pressed: ${note} (${freq}Hz)`)
+  const handlePianoKeyPress = (note: string, _freq: number) => {
     audioPlayer.playNote(note)
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       {/* 标题 */}
@@ -440,30 +138,28 @@ export function PracticeScreen({ navigation }: any) {
           <Ionicons name="musical-notes" size={24} color="#9B59B6" style={styles.titleIcon} />
           <Text style={[styles.title, { color: colors.text }]}>实时音准练习</Text>
         </View>
-        <TouchableOpacity onPress={openTemplateModal} disabled={recordingState !== 'idle'}>
-          <Text style={[styles.templateButtonText, { color: recordingState !== 'idle' ? colors.textSecondary : selectedTemplate ? '#FF9500' : '#007AFF' }]} numberOfLines={1}>
-            {selectedTemplate ? (selectedTemplate.name.length > 4 ? selectedTemplate.name.slice(0, 4) + '…' : selectedTemplate.name) : '无模板'}
+        <TouchableOpacity onPress={templateAudio.openTemplateModal} disabled={recording.recordingState !== 'idle'}>
+          <Text style={[styles.templateButtonText, { color: recording.recordingState !== 'idle' ? colors.textSecondary : templateAudio.selectedTemplate ? '#FF9500' : '#007AFF' }]} numberOfLines={1}>
+            {templateAudio.selectedTemplate ? (templateAudio.selectedTemplate.name.length > 4 ? templateAudio.selectedTemplate.name.slice(0, 4) + '…' : templateAudio.selectedTemplate.name) : '无模板'}
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* 中间内容区域 - 音高图/钢琴提示 + 控制按钮 */}
       <View style={styles.middleContent}>
-        {/* 音高曲线图 - 录音模式显示 */}
+        {/* 音高曲线图 */}
         {appMode === 'recording' && (
           <View style={styles.chartContainer} onLayout={e => setChartAreaHeight(e.nativeEvent.layout.height)}>
             <PitchChart
               key={`${currentMode.startNote}-${currentMode.endNote}`}
-              data={pitchData}
-              templateData={templatePitchData.length > 0 ? templatePitchData : undefined}
+              data={recording.pitchData}
+              templateData={templateAudio.templatePitchData.length > 0 ? templateAudio.templatePitchData : undefined}
               minNote={currentMode.startNote}
               maxNote={currentMode.endNote}
               duration={CONFIG.DEFAULT_CHART_DURATION}
               height={chartAreaHeight}
-              currentTime={recordingTime}
-              paused={recordingState === 'paused'}
-              seekable={recordingState === 'paused'}
-
+              currentTime={recording.recordingTime}
+              paused={recording.recordingState === 'paused'}
+              seekable={recording.recordingState === 'paused'}
               leftDisplay={leftYAxisDisplay}
               rightDisplay={rightYAxisDisplay}
               showBothYAxes={showBothYAxes}
@@ -482,42 +178,38 @@ export function PracticeScreen({ navigation }: any) {
 
         {/* 控制按钮 */}
         <View style={styles.controls}>
-          {/* 状态1：空闲（Idle）- 显示开始按钮 */}
-          {recordingState === 'idle' && appMode === 'recording' && (
-            <TouchableOpacity style={styles.iconButton} onPress={startRecording}>
+          {recording.recordingState === 'idle' && appMode === 'recording' && (
+            <TouchableOpacity style={styles.iconButton} onPress={recording.startRecording}>
               <Ionicons name="mic-outline" size={32} color="#FF3B30" />
               <Text style={[styles.iconButtonLabel, { color: '#FF3B30' }]}>开始</Text>
             </TouchableOpacity>
           )}
 
-          {/* 状态2：录音中（Recording）- 显示暂停按钮 */}
-          {recordingState === 'recording' && (
-            <TouchableOpacity style={styles.iconButton} onPress={pauseRecording}>
+          {recording.recordingState === 'recording' && (
+            <TouchableOpacity style={styles.iconButton} onPress={recording.pauseRecording}>
               <Ionicons name="pause-circle-outline" size={32} color="#FF9500" />
               <Text style={[styles.iconButtonLabel, { color: '#FF9500' }]}>暂停</Text>
             </TouchableOpacity>
           )}
 
-          {/* 状态3：已暂停（Paused）*/}
-          {recordingState === 'paused' && (
+          {recording.recordingState === 'paused' && (
             <View style={styles.pausedButtonsContainer}>
-              <TouchableOpacity style={styles.iconButton} onPress={discardRecording}>
+              <TouchableOpacity style={styles.iconButton} onPress={recording.discardRecording}>
                 <Ionicons name="trash-outline" size={32} color="#FF3B30" />
                 <Text style={[styles.iconButtonLabel, { color: '#FF3B30' }]}>放弃</Text>
               </TouchableOpacity>
-              {!reachedDurationLimit && (
-                <TouchableOpacity style={styles.iconButton} onPress={resumeRecording}>
+              {!recording.reachedDurationLimit && (
+                <TouchableOpacity style={styles.iconButton} onPress={recording.resumeRecording}>
                   <Ionicons name="mic-outline" size={32} color="#FF9500" />
                   <Text style={[styles.iconButtonLabel, { color: '#FF9500' }]}>继续</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity style={styles.iconButton} onPress={saveAndStopRecording}>
+              <TouchableOpacity style={styles.iconButton} onPress={saveAndStop}>
                 <Ionicons name="checkmark-circle-outline" size={32} color="#34C759" />
                 <Text style={[styles.iconButtonLabel, { color: '#34C759' }]}>保存</Text>
               </TouchableOpacity>
             </View>
           )}
-
         </View>
 
         {/* 虚拟钢琴 */}
@@ -536,22 +228,18 @@ export function PracticeScreen({ navigation }: any) {
               <Piano
                 startNote={currentMode.startNote}
                 endNote={currentMode.endNote}
-                disabled={appMode === 'recording' && recordingState === 'recording'}
+                disabled={appMode === 'recording' && recording.recordingState === 'recording'}
                 onKeyPress={handlePianoKeyPress}
               />
-              {appMode === 'recording' && recordingState === 'recording' && (
+              {appMode === 'recording' && recording.recordingState === 'recording' && (
                 <TouchableOpacity
                   style={styles.pianoDisabledHintOverlay}
                   onPress={handleDoubleTap}
                   activeOpacity={1}
                 >
                   <View style={styles.pianoDisabledHint}>
-                    <Text style={styles.pianoDisabledHintText}>
-                      [R] 录音中
-                    </Text>
-                    <Text style={styles.pianoDisabledHintSubtext}>
-                      双击暂停录音，激活钢琴
-                    </Text>
+                    <Text style={styles.pianoDisabledHintText}>[R] 录音中</Text>
+                    <Text style={styles.pianoDisabledHintSubtext}>双击暂停录音，激活钢琴</Text>
                   </View>
                 </TouchableOpacity>
               )}
@@ -559,31 +247,32 @@ export function PracticeScreen({ navigation }: any) {
           )}
         </View>
       </View>
+
       {/* 模板选择 Modal */}
-      <Modal visible={templateModalVisible} animationType="slide" transparent onRequestClose={() => setTemplateModalVisible(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setTemplateModalVisible(false)}>
+      <Modal visible={templateAudio.templateModalVisible} animationType="slide" transparent onRequestClose={() => templateAudio.setTemplateModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => templateAudio.setTemplateModalVisible(false)}>
           <View style={[styles.modalSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
             <Text style={[styles.modalSheetTitle, { color: colors.text }]}>选择模板</Text>
-            {templates.length === 0 ? (
+            {templateAudio.templates.length === 0 ? (
               <View style={styles.modalEmpty}>
                 <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>暂无模板，请先到「模板」页导入</Text>
-                <TouchableOpacity onPress={() => { setTemplateModalVisible(false); navigation.navigate('Templates') }}>
+                <TouchableOpacity onPress={() => { templateAudio.setTemplateModalVisible(false); navigation.navigate('Templates') }}>
                   <Text style={{ color: '#007AFF', fontSize: 15 }}>前往模板页 →</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <ScrollView>
-                <TouchableOpacity style={[styles.modalItem, { borderBottomColor: colors.border }]} onPress={() => selectTemplate(null)}>
-                  <Text style={[styles.modalItemText, { color: selectedTemplate ? colors.text : '#007AFF' }]}>不使用模板</Text>
-                  {!selectedTemplate && <Ionicons name="checkmark" size={20} color="#007AFF" />}
+                <TouchableOpacity style={[styles.modalItem, { borderBottomColor: colors.border }]} onPress={() => templateAudio.selectTemplate(null)}>
+                  <Text style={[styles.modalItemText, { color: templateAudio.selectedTemplate ? colors.text : '#007AFF' }]}>不使用模板</Text>
+                  {!templateAudio.selectedTemplate && <Ionicons name="checkmark" size={20} color="#007AFF" />}
                 </TouchableOpacity>
-                {templates.map(t => (
-                  <TouchableOpacity key={t.id} style={[styles.modalItem, { borderBottomColor: colors.border }]} onPress={() => selectTemplate(t)}>
+                {templateAudio.templates.map(t => (
+                  <TouchableOpacity key={t.id} style={[styles.modalItem, { borderBottomColor: colors.border }]} onPress={() => templateAudio.selectTemplate(t)}>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.modalItemText, { color: selectedTemplate?.id === t.id ? '#FF9500' : colors.text }]}>♪ {t.name}</Text>
+                      <Text style={[styles.modalItemText, { color: templateAudio.selectedTemplate?.id === t.id ? '#FF9500' : colors.text }]}>♪ {t.name}</Text>
                       <Text style={{ fontSize: 12, color: colors.textSecondary }}>{t.sourceFileName}</Text>
                     </View>
-                    {selectedTemplate?.id === t.id && <Ionicons name="checkmark" size={20} color="#FF9500" />}
+                    {templateAudio.selectedTemplate?.id === t.id && <Ionicons name="checkmark" size={20} color="#FF9500" />}
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -596,10 +285,7 @@ export function PracticeScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff'
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee',
@@ -617,138 +303,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1,
   },
   modalItemText: { fontSize: 16, fontWeight: '500' },
-  titleWithIcon: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  titleIcon: {
-    marginRight: 8
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold'
-  },
-  middleContent: {
-    flex: 1,
-    flexDirection: 'column'
-  },
+  titleWithIcon: { flexDirection: 'row', alignItems: 'center' },
+  titleIcon: { marginRight: 8 },
+  title: { fontSize: 20, fontWeight: 'bold' },
+  middleContent: { flex: 1, flexDirection: 'column' },
   chartContainer: { flex: 1, minHeight: 0 },
-  pianoModeHint: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16
-  },
-  pianoModeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8
-  },
-  pianoModeSubtext: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 8
-  },
-  pianoModeHintText: {
-    fontSize: 14,
-    color: '#999'
-  },
+  pianoModeHint: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
+  pianoModeText: { fontSize: 24, fontWeight: 'bold', marginBottom: 8 },
+  pianoModeSubtext: { fontSize: 16, color: '#666', marginBottom: 8 },
+  pianoModeHintText: { fontSize: 14, color: '#999' },
   controls: {
-    paddingTop: 8,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: 70,
-    flexShrink: 0
+    paddingTop: 8, paddingBottom: 16, paddingHorizontal: 16,
+    justifyContent: 'center', alignItems: 'center', minHeight: 70, flexShrink: 0,
   },
-  controlButton: {
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minWidth: 80,
-    alignItems: 'center'
-  },
-  controlButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500'
-  },
-  recordButton: {
-    backgroundColor: '#FF3B30'
-  },
-  pauseButton: {
-    backgroundColor: '#FF9500'
-  },
-  pausedButtonsContainer: {
-    flexDirection: 'row',
-    gap: 24,
-    alignItems: 'center',
-  },
-  iconButton: {
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  iconButtonLabel: {
-    fontSize: 11,
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  pausedButton: {
-    backgroundColor: '#007AFF'
-  },
-  resumeButton: {
-    backgroundColor: '#FF9500'
-  },
-  saveButton: {
-    backgroundColor: '#34C759'
-  },
-  discardButton: {
-    backgroundColor: '#FF3B30'
-  },
-  pianoSection: {
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    flexShrink: 0
-  },
-  pianoHeader: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#f5f5f5',
-    alignItems: 'center'
-  },
-  pianoHeaderText: {
-    fontSize: 16,
-    fontWeight: '500'
-  },
-  pianoWrapper: {
-    position: 'relative'
-  },
+  pausedButtonsContainer: { flexDirection: 'row', gap: 24, alignItems: 'center' },
+  iconButton: { alignItems: 'center', paddingHorizontal: 8 },
+  iconButtonLabel: { fontSize: 11, marginTop: 4, fontWeight: '500' },
+  pianoSection: { borderTopWidth: 1, borderTopColor: '#eee', flexShrink: 0 },
+  pianoHeader: { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f5f5f5', alignItems: 'center' },
+  pianoHeaderText: { fontSize: 16, fontWeight: '500' },
+  pianoWrapper: { position: 'relative' },
   pianoDisabledHintOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 150,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 100
+    position: 'absolute', top: 0, left: 0, right: 0, height: 150,
+    backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center', zIndex: 100,
   },
-  pianoDisabledHint: {
-    backgroundColor: '#FFF3CD',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center'
-  },
-  pianoDisabledHintText: {
-    fontSize: 16,
-    color: '#856404',
-    fontWeight: '500',
-    marginBottom: 4
-  },
-  pianoDisabledHintSubtext: {
-    fontSize: 12,
-    color: '#856404'
-  }
+  pianoDisabledHint: { backgroundColor: '#FFF3CD', padding: 16, borderRadius: 8, alignItems: 'center' },
+  pianoDisabledHintText: { fontSize: 16, color: '#856404', fontWeight: '500', marginBottom: 4 },
+  pianoDisabledHintSubtext: { fontSize: 12, color: '#856404' },
+  // legacy unused styles kept to avoid JSX-side errors
+  controlButton: { paddingHorizontal: 32, paddingVertical: 12, borderRadius: 8, minWidth: 80, alignItems: 'center' },
+  controlButtonText: { color: '#fff', fontSize: 16, fontWeight: '500' },
+  recordButton: { backgroundColor: '#FF3B30' },
+  pauseButton: { backgroundColor: '#FF9500' },
+  pausedButton: { backgroundColor: '#007AFF' },
+  resumeButton: { backgroundColor: '#FF9500' },
+  saveButton: { backgroundColor: '#34C759' },
+  discardButton: { backgroundColor: '#FF3B30' },
 })
