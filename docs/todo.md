@@ -57,17 +57,19 @@
   - `src/hooks/useTemplateAudio.ts`（`startTemplateAudio` 函数）
 
 ### ~~1. 播放历史录音/模板时红线闪动 + 音高曲线消失~~（已解决）
-- **状态**：✅ 已修复（测试验证）
+- **状态**：✅ 已修复
 - **现象**：
   - 播放历史录音或模板时，红线（当前时间指示线）以 100ms 频率闪动
-  - 播放过程中音高曲线会短暂消失
-- **根本原因**：`PlaybackPitchChart` 中 `currentTime` 和 `viewportStart` 更新时序不一致导致的"撕裂"（tearing）：
-  - `currentTime` 由 100ms 定时器直接 `setCurrentTime(t)` → 立即触发 re-render
-  - `viewportStart` 由 `viewportAnim.setValue()` 驱动，但更新路径是 `useEffect([currentTime])` → 动画 listener → `setViewportStart()`，比 `currentTime` 晚一帧
-  - 每次 `currentTime` 更新，都有一帧 `viewportStart` 是旧值，红线位置用两者之差计算，导致每 100ms 闪一次
-  - 同理，这一帧旧的 `viewportStart/viewportEnd` 传给 `PitchCanvas`，可能导致 `bisectLeft/bisectRight` 切出空区间，曲线短暂消失
-- **修复思路**：在同一帧内同步更新 `currentTime` 和 `viewportStart`，或改用 ref 直接驱动红线位置（不走 React state），避免异步 useEffect 带来的时序差
-- **涉及文件**：`src/components/PlaybackPitchChart.tsx`
+  - 中间段（三段式中间部分）有，第一段和最后一段没有
+  - 录音越长，闪动幅度越大
+- **根本原因**：`PlaybackPitchChart` 中 `currentTime` 和 `viewportStart` 在不同渲染帧更新，导致 tearing：
+  - `currentTime` 来自 prop，父组件每 100ms 更新，**同帧可用**
+  - `viewportStart` 来自 state，更新路径是 `useEffect([currentTime]) → viewportAnim.setValue() → listener → setViewportStart()`，**比 currentTime 晚一帧**
+  - 红线位置 = `(currentTime - viewportStart) / SECONDS_PER_SCREEN * width`，两者不同帧 → 每 100ms 闪一次
+  - 第一段/最后一段 `viewportStart` 是固定值，不随 currentTime 变化，所以不闪
+  - 中间段 `viewportStart` 每 100ms 都在变。录音越长，pitchData 越多，JS 线程越忙，React 可能批量处理多次 `setViewportStart` 导致 viewportStart 落后不止一帧，闪动幅度随之增大
+- **修复方案**：播放时不从 state 读 `viewportStart`，改为在渲染时直接由 `currentTime` 计算 `effectiveViewportStart`，与 currentTime 同帧，消除 tearing。拖动/暂停时仍走 Animated + state，保留弹簧动画
+- **涉及文件**：`src/components/PlaybackPitchChart.tsx`（第 93–97 行）
 
 ### ~~录制/拖动时红线超过右边框后消失~~（已解决）
 - **状态**：✅ 已修复
