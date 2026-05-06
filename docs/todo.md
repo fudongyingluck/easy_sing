@@ -39,12 +39,22 @@
 - **状态**：🔍 原因未确认，待复现验证
 - **现象**：
   - 录音过程中，音高曲线和声音会周期性消失一小段（约几百毫秒），然后恢复，反复发生
-- **可能原因（按可能性排序）**：
-  1. **`setVoiceProcessingEnabled:YES`（最可能）**：AUVoiceIO 为电话通话设计，会把唱歌的持续音当噪声周期性压制 → 进入 tap 的 samples 幅度降低 → RMS < 0.008 → 检测跳过，同时 WAV 写入近零数据
-  2. **AVAudioEngine 路由变化后无恢复机制**：代码未监听 `AVAudioEngineConfigurationChangeNotification`，蓝牙重协商等路由变化时 engine 暂停后无法重启
-  3. **滑窗 buffer size 问题**：路由变化瞬间 iOS 可能下发小 buffer（< kWindow=2048 frames），导致滑窗条件 `offset + kWindow <= frames` 不成立，整段无分析
-- **验证方法**：掉段后回放那段录音——若那段是**真静音**则为原因 1；若声音完整但曲线空白则为原因 2 或 3
-- **涉及文件**：`ios/PitchPerfect/PitchDetectorModule.mm`（第 163-167 行 voice processing、第 228 行滑窗条件）
+- **关键判别证据（新增）**：
+  - ✅ **无模板时不掉帧**，有模板时掉帧 → 掉帧与模板播放强相关
+  - 模板音频通过**有线耳机**播放，不是扬声器 → 排除 AEC 回声消除模板音频的可能（麦克风拾不到耳机内的声音）
+  - → 原因 1（`setVoiceProcessingEnabled:YES` 把唱歌音当噪声压制）仍有可能，但需重新评估：AUVoiceIO 在有音频输出时是否行为不同？
+  - → **新增最可能原因**：模板开始播放时 `react-native-sound` 内部重置 AVAudioSession category 为 `.playback`，与录音所需的 `.playAndRecord` 冲突，导致周期性中断
+- **可能原因（按可能性排序，已修订）**：
+  1. **Audio Session 冲突（新，最可能）**：`startTemplateAudio` 启动 react-native-sound 时，Sound 对象可能将 AVAudioSession 切回 `.playback` category，破坏录音 session，周期性触发 engine 中断
+  2. **`setVoiceProcessingEnabled:YES`**：AUVoiceIO 在同时有音频输出时可能触发更激进的噪声抑制，把人声当噪声压制
+  3. **AVAudioEngine 路由变化后无恢复机制**：代码未监听 `AVAudioEngineConfigurationChangeNotification`，耳机插拔/路由变化时 engine 暂停后无法重启
+  4. **滑窗 buffer size 问题**：路由变化瞬间 iOS 可能下发小 buffer（< kWindow=2048 frames），导致滑窗条件 `offset + kWindow <= frames` 不成立，整段无分析
+- **验证方法**：
+  - 掉段后回放那段录音——若那段是**真静音**则 session 被中断（原因 1/2）；若声音完整但曲线空白则原因 3/4
+  - 在 `startTemplateAudio` 前后打印 `AVAudioSession.sharedInstance().category`，确认是否被改变
+- **涉及文件**：
+  - `ios/PitchPerfect/PitchDetectorModule.mm`（第 163-167 行 voice processing、第 228 行滑窗条件）
+  - `src/hooks/useTemplateAudio.ts`（`startTemplateAudio` 函数）
 
 ### 1. 播放历史录音/模板时红线闪动 + 音高曲线消失（待修复）
 - **状态**：🐛 已确认，待修复
@@ -58,6 +68,25 @@
   - 同理，这一帧旧的 `viewportStart/viewportEnd` 传给 `PitchCanvas`，可能导致 `bisectLeft/bisectRight` 切出空区间，曲线短暂消失
 - **修复思路**：在同一帧内同步更新 `currentTime` 和 `viewportStart`，或改用 ref 直接驱动红线位置（不走 React state），避免异步 useEffect 带来的时序差
 - **涉及文件**：`src/components/PlaybackPitchChart.tsx`
+
+### ~~录制/拖动时红线超过右边框后消失~~（已解决）
+- **状态**：✅ 已修复
+- **现象**：
+  - 录制接近时长上限（如 1 分钟）时，红线在到达右边框后会瞬间消失，停止后又回到右边框
+  - 暂停后向左拖动（查看更早时段），松手时红线消失
+- **根本原因（两个独立 bug，叠加表现）**：
+  1. **PanResponder 闭包捕获了过期的 `totalDuration`**
+     - `PanResponder` 在组件首次挂载时通过 `useRef(PanResponder.create(...))` 创建，内部闭包只捕获了**首次渲染时**的 `totalDuration` 值。
+     - 而 `recordingDurationLimit` 是从 AsyncStorage 异步加载的，组件挂载时 `useState(600)` 是初始默认值（600 秒），加载完成后才更新为用户设置值（如 60 秒）。
+     - 结果：闭包里 `maxSeekTime = 600`，拖动时 `seekTime` 可以超过 60，导致 `anchor > totalDuration`，`currentTimeLine > endTime`，红线因超出边界判断而不被渲染（消失）。
+  2. **定时器超调（timer overshoot）**
+     - 录音计时器通过 `setInterval` 轮询 `audioService.getRecordingElapsed()`，而 `onMaxDurationReached` 是另一个异步回调。
+     - 在两者之间存在一个短暂窗口：`setInterval` 先读到 60.1 秒并调用 `setRecordingTime(60.1)`，`onMaxDurationReached` 还没来得及把它钳回 60。
+     - 这段时间内 `currentTime = 60.1`，`anchor = 60.1 > endTime = 60`，红线条件判断失败，短暂消失。
+- **修复方案**：
+  1. 新增 `totalDurationRef`，用 `useEffect` 同步最新 prop 值，在 PanResponder 闭包内改用 `totalDurationRef.current`，确保 `maxSeekTime` 始终反映当前 `totalDuration`。
+  2. 在 `computeViewport` 调用前对 `rawAnchor` 做钳位：`anchor = rawAnchor > totalDuration ? totalDuration : rawAnchor`，无论计时器超调还是拖动越界，红线都钉在右边框而不是消失。
+- **涉及文件**：`src/components/PitchChart.tsx`
 
 ### 2. 偶发：点击「放弃」后出现钢琴声（待定位）
 - **状态**：🐛 偶发，未找到稳定复现路径

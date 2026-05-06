@@ -2,22 +2,13 @@ import React, { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { View, StyleSheet, useWindowDimensions, PanResponder, ScrollView } from 'react-native'
 import { PitchDataPoint } from '../types'
 import { noteNameToMidi } from '../utils/noteUtils'
+import { computeViewport } from '../utils/viewportUtils'
 import { CONFIG } from '../config/constants'
 import { PitchCanvas, PitchXAxis, X_AXIS_HEIGHT, PADDING, pixelsPerSemitone, NoteDisplay } from './PitchCanvas'
 import { useTheme } from '../context/ThemeContext'
 
 export type { NoteDisplay }
 
-/**
- * 录音模式下视口的右边沿（= endTime）。
- * 红线居中逻辑：视口宽 duration，currentTime 位于中点。
- * 当 currentTime < duration/2 时红线还未到中间，viewportEnd 钉在 duration（红线从左向右走）。
- * @param currentTime 当前录音时间
- * @param duration    视口时间跨度
- */
-function recordingViewportEnd(currentTime: number, duration: number): number {
-  return Math.max(duration, currentTime + duration / 2)
-}
 
 interface PitchChartProps {
   data: PitchDataPoint[]
@@ -35,6 +26,8 @@ interface PitchChartProps {
   leftDisplay?: NoteDisplay
   rightDisplay?: NoteDisplay
   showBothYAxes?: boolean
+  /** 录音时长上限（秒），用于实现阶段三：视口到头后红线向右移到边缘。0 表示无上限 */
+  totalDuration?: number
 }
 
 export function PitchChart({
@@ -51,13 +44,14 @@ export function PitchChart({
   leftDisplay = 'english',
   rightDisplay = 'english',
   showBothYAxes = true,
+  totalDuration = 0,
 }: PitchChartProps) {
   const { colors } = useTheme()
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const [initialScrollDone, setInitialScrollDone] = useState(false)
 
-  // seekTime：暂停后视口右边沿的绝对时间，至少为 duration，确保视口不从 0 开始
-  const [seekTime, setSeekTime] = useState(() => Math.max(duration, currentTime ?? 0))
+  // seekTime：暂停后的时间锚点（对应红线位置），初始值 = currentTime
+  const [seekTime, setSeekTime] = useState(() => currentTime ?? 0)
 
   const scrollViewRef = useRef<ScrollView>(null)
   const actualScrollY = useRef(0)
@@ -70,6 +64,7 @@ export function PitchChart({
   const durationRef = useRef(duration)
   const currentTimeRef = useRef(currentTime)
   const onSeekChangeRef = useRef(onSeekChange)
+  const totalDurationRef = useRef(totalDuration)
   const panStartSeekTime = useRef(0)
   const panStartScrollY = useRef(0)
   const directionLock = useRef<'horizontal' | 'vertical' | null>(null)
@@ -80,6 +75,7 @@ export function PitchChart({
   useEffect(() => { durationRef.current = duration }, [duration])
   useLayoutEffect(() => { currentTimeRef.current = currentTime }, [currentTime])
   useEffect(() => { onSeekChangeRef.current = onSeekChange }, [onSeekChange])
+  useEffect(() => { totalDurationRef.current = totalDuration }, [totalDuration])
 
   const updateSeekTime = (v: number) => { seekTimeRef.current = v; setSeekTime(v) }
 
@@ -88,9 +84,10 @@ export function PitchChart({
   }
 
   // paused 状态切换时更新视口，使红线保持居中
-  // 用 useLayoutEffect 在绘制前同步修正 seekTime，避免闪烁
+  // paused 从 false→true 时，将 seekTime 同步为 currentTime，
+  // 使暂停瞬间视口无跳变，且后续拖动从正确锚点出发
   useLayoutEffect(() => {
-    updateSeekTime(recordingViewportEnd(currentTimeRef.current ?? 0, durationRef.current))
+    updateSeekTime(currentTimeRef.current ?? 0)
   }, [paused])
 
   const minMidi = noteNameToMidi(minNote)
@@ -117,23 +114,12 @@ export function PitchChart({
     }
   }, [minMidi, maxMidi, initialScrollDone, svgHeight, visibleHeight])
 
-  // 时间窗口计算
-  // - seekable + paused：视口右边沿 = seekTime（用户拖拽直接改这个值）
-  // - seekable + playing（历史播放）：跟随 currentTime，右边沿对齐
-  // - 非 seekable（录音中）：红线居中，视口以 currentTime 为轴心，右半可预览模板后续内容
-  let startTime: number
-  let endTime: number
-  if (seekable && paused) {
-    startTime = Math.max(0, seekTime - duration)
-    endTime = seekTime
-  } else if (seekable) {
-    const now = Math.max(duration, currentTime ?? 0)
-    startTime = Math.max(0, now - duration)
-    endTime = now
-  } else {
-    endTime = recordingViewportEnd(currentTime ?? 0, duration)
-    startTime = Math.max(0, endTime - duration)
-  }
+  // 时间窗口计算（三段式，录制和拖动共用同一套逻辑）
+  // anchor = seekTime（暂停拖动）或 currentTime（其他情况）
+  // 钳位到 [0, totalDuration]：防止定时器/拖动超出上限导致红线越界消失
+  const rawAnchor = (seekable && paused) ? seekTime : (currentTime ?? 0)
+  const anchor = (totalDuration > 0 && rawAnchor > totalDuration) ? totalDuration : rawAnchor
+  const { startTime, endTime, currentTimeLine: anchorTimeLine } = computeViewport(anchor, duration, totalDuration)
 
   // PanResponder：竖向始终可用；横向仅 seekable=true 且 paused=true 时生效
   const panResponder = useRef(
@@ -154,12 +140,11 @@ export function PitchChart({
           const secsPerPixel = durationRef.current / (windowWidthRef.current - 20)
           // 向右拖（dx > 0）= 往历史看 = seekTime 减小
           const newSeekTime = panStartSeekTime.current - dx * secsPerPixel
-          const minSeekTime = durationRef.current  // 最多看到 time=0
-          const maxSeekTime = recordingViewportEnd(currentTimeRef.current ?? 0, durationRef.current)
+          const minSeekTime = 0  // seekTime 最小为 0（anchor 可以到 0，Phase1 视口会钉在起点）
+          const maxSeekTime = totalDurationRef.current > 0 ? totalDurationRef.current : (currentTimeRef.current ?? 0)
           const clamped = Math.max(minSeekTime, Math.min(newSeekTime, maxSeekTime))
           updateSeekTime(clamped)
-          const newStartTime = Math.max(0, clamped - durationRef.current)
-          onSeekChangeRef.current?.(newStartTime)
+          onSeekChangeRef.current?.(clamped)  // 上报 seekTime（红线位置），不是 startTime
         } else if (directionLock.current === 'vertical') {
           scrollTo(panStartScrollY.current - dy)
         }
@@ -190,7 +175,7 @@ export function PitchChart({
           leftDisplay={leftDisplay}
           rightDisplay={rightDisplay}
           showBothYAxes={showBothYAxes}
-          currentTimeLine={currentTime !== undefined ? Math.min(currentTime, endTime) : currentTime}
+          currentTimeLine={currentTime !== undefined ? anchorTimeLine : undefined}
         />
       </ScrollView>
 
