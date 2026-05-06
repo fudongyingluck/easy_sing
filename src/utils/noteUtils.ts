@@ -1,9 +1,14 @@
 import { NOTE_NAMES, MIDI_OFFSET } from '../config/constants'
 
-// 频率转MIDI音符编号
+// 频率转MIDI音符编号（取整，用于音符名称判断）
 export function freqToMidi(freq: number): number {
   if (freq <= 0) return -1
   return Math.round(12 * Math.log2(freq / 440) + 69)
+}
+
+// 频率转MIDI音符编号（浮点，用于绘图定位，保留半音之间的精度）
+export function freqToMidiFloat(freq: number): number {
+  return 12 * Math.log2(freq / 440) + 69
 }
 
 // MIDI音符编号转频率

@@ -13,9 +13,9 @@
 
 ### 阶段二：低风险清理（零逻辑改动，可随时做）
 对应 code_fix_1 中不涉及逻辑变更的条目，逐条独立提交：
-- **CF1-7**：删除 `CONFIG` 里未使用的 YIN 常量（纯删除）
-- **CF1-6**：`PitchCanvas.tsx` 里的 `freqToMidi` 改为 import `noteUtils.ts` 的版本（纯替换，逻辑不变）
-- **CF1-5**：`PracticeScreen` 改用 `useDoubleTap` Hook，或删除 `doubleTap.ts`（二选一）
+- ~~**CF1-7**：删除 `CONFIG` 里未使用的 YIN 常量（纯删除）~~ ✅ 已完成
+- ~~**CF1-6**：`PitchCanvas.tsx` 里的 `freqToMidi` 改为 import `noteUtils.ts` 的版本~~ ✅ 已完成（提取为 `freqToMidiFloat`，保留浮点精度）
+- ~~**CF1-5**：`PracticeScreen` 改用 `useDoubleTap` Hook，或删除 `doubleTap.ts`（二选一）~~ ✅ 已完成（使用 `useDoubleTap`）
 
 ### 阶段三：补关键单测（重构前的安全网）
 在动核心逻辑之前，先给以下模块补测试：
@@ -56,8 +56,8 @@
   - `ios/PitchPerfect/PitchDetectorModule.mm`（第 163-167 行 voice processing、第 228 行滑窗条件）
   - `src/hooks/useTemplateAudio.ts`（`startTemplateAudio` 函数）
 
-### 1. 播放历史录音/模板时红线闪动 + 音高曲线消失（待修复）
-- **状态**：🐛 已确认，待修复
+### ~~1. 播放历史录音/模板时红线闪动 + 音高曲线消失~~（已解决）
+- **状态**：✅ 已修复（测试验证）
 - **现象**：
   - 播放历史录音或模板时，红线（当前时间指示线）以 100ms 频率闪动
   - 播放过程中音高曲线会短暂消失
@@ -178,10 +178,10 @@
 - **现状**：`config/constants.ts` 里的 `YIN_THRESHOLD / YIN_SAMPLE_RATE / YIN_BUFFER_SIZE / YIN_OVERLAP / YIN_CONFIDENCE_THRESHOLD` 在 JS 层从未被读取（YIN 算法跑在 Native）
 - **修复方向**：直接删除
 
-### CF1-8. 文档与代码不符（文档需更新）
-- `template_design.md` 中 `audioSource` 枚举为 `'import' | 'recording'`，代码已变为 `'file' | 'exist_record' | 'deleted_record'`
-- `implementation.md` 中导航结构写的是 3 个 Tab（练习/录音/设置），当前已是 4 个（练习/记录/模板/设置）
-- `implementation.md` 中引用的 `RecordingPitchChart` 实际文件名为 `PlaybackPitchChart`
+### ~~CF1-8. 文档与代码不符（文档需更新）~~ ✅ 已完成
+- ~~`template_design.md` 中 `audioSource` 枚举为 `'import' | 'recording'`~~（已更新为 `'file' | 'exist_record' | 'deleted_record'`）
+- ~~`implementation.md` 中导航结构写的是 3 个 Tab~~（已更新为 4 个 Tab）
+- ~~`implementation.md` 中引用的 `RecordingPitchChart`~~（已更新为 `PlaybackPitchChart`）
 
 ---
 

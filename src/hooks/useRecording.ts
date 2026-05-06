@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react'
 import { Alert, Linking, NativeModules } from 'react-native'
 import RNFS from 'react-native-fs'
 import { audioService } from '../services/audio'
+import { audioPlayer } from '../utils/audioUtils'
 import { savePitchData, loadRecordings, saveRecordings } from '../services/storage'
 import { RecordingState, Recording, PitchDataPoint } from '../types'
 
@@ -180,6 +181,7 @@ export function useRecording({
       clearTimer()
       onStop?.()
       audioService.stopPlayback()
+      audioPlayer.release()
       audioService.setOnPitchDataUpdate(null)
       audioService.setOnMaxDurationReached(null)
       const result = await audioService.stopRecording()

@@ -69,7 +69,7 @@ interface PitchTemplate {
   name: string                        // 用户可编辑的名称
   sourceFileName: string              // 原始文件名，仅展示用
   audioFilePath: string               // 文件名（不含目录），结合 audioSource 解析完整路径
-  audioSource: 'import' | 'recording' // 音频文件所在目录：Imports/ 或 Recordings/
+  audioSource?: 'file' | 'exist_record' | 'deleted_record' // 路径解析策略：file→Imports/，exist_record→Recordings/（录音仍存在），deleted_record→录音已删除
   pitchDataKey: string                // AsyncStorage key
   duration: number                    // 秒
   createTime: string                  // ISO 日期字符串
@@ -79,7 +79,7 @@ interface PitchTemplate {
 
 - 音高数据格式与现有 `PitchData` 完全一致，复用现有存储逻辑
 - 从录音转换时，`audioFilePath` 和 `pitchDataKey` 直接指向原录音的数据，不复制任何文件
-- `audioSource` 决定路径解析策略：`'import'` → `Imports/`，`'recording'` → `Recordings/`
+- `audioSource` 决定路径解析策略：`'file'` → `Imports/`，`'exist_record'` → `Recordings/`（录音仍存在），`'deleted_record'` → 录音已删除，音频不可用
 
 ---
 
@@ -95,13 +95,13 @@ interface PitchTemplate {
 
 ### 删除联动规则
 - **删除模板**
-  - `audioSource === 'import'`：同时删除 `Imports/` 内的音频文件 + AsyncStorage 音高数据
-  - `audioSource === 'recording'`：只删模板元数据，不动原录音的音频文件和音高数据
+  - `audioSource === 'file'`：同时删除 `Imports/` 内的音频文件 + AsyncStorage 音高数据
+  - `audioSource === 'exist_record'`：只删模板元数据，不动原录音的音频文件和音高数据
 - **删除录音** → 先检查是否有模板引用该录音（`sourceRecordingId` 匹配）：
   - 弹窗一（无论是否有引用）：普通确认弹窗「确定要删除录音"XXX"吗？」，与现在一致
   - 用户确认后，若有模板引用，弹窗二：「该录音已被设为模板"XXX"，如何处理？」，两个按钮：
     - 「同时删除模板」（destructive）→ 相关模板元数据一并删除（音频文件和 pitchData 随录音一起清掉）
-    - 「保留模板」→ 将录音音频文件复制到 `Imports/`，将 pitchData 复制到新 key，更新模板的 `audioFilePath`、`pitchDataKey`、`audioSource` 均指向副本，再删除原录音
+    - 「保留模板」→ 将录音音频文件复制到 `Imports/`，将 pitchData 复制到新 key，更新模板的 `audioFilePath`、`pitchDataKey`、`audioSource`（改为 `'file'`）均指向副本，再删除原录音
   - **批量删除时**：弹窗一同上；用户确认后，若有引用，弹窗二说明受影响的模板数量，用户选择统一处理策略后批量执行
 
 ---
