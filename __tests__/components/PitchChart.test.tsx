@@ -2,13 +2,11 @@
  * PitchChart 合并组件单测（TDD）
  *
  * 测试范围：
- *   1. 时间窗口计算（playing / paused）
- *   2. 红线位置（currentTimeLine 传递到 PitchCanvas）
- *   3. seekable + onSeekChange 行为
- *   4. 基础 props 向下透传
- *
- * 依赖：@testing-library/react-native
- *   安装：npm install --save-dev @testing-library/react-native
+ *   1. computeViewport 纯函数（三段式视口 + 红线）
+ *   2. anchor 选择：录制中用 currentTime，暂停后用 seekTime
+ *   3. 暂停切换时视口无跳变
+ *   4. 拖动行为：seekTime 驱动视口 + 红线，onSeekChange 上报 seekTime
+ *   5. 基础 props 向下透传
  */
 
 import React from 'react'
@@ -18,11 +16,9 @@ import { PitchDataPoint } from '../../src/types'
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-// 捕获 PanResponder 配置，使测试可直接调用手势回调
 let panConfig: any = null
-
-// 捕获 PitchCanvas 收到的 props，用于断言
 let lastPitchCanvasProps: any = {}
+
 jest.mock('../../src/components/PitchCanvas', () => ({
   PitchCanvas: (props: any) => { lastPitchCanvasProps = props; return null },
   PitchXAxis: () => null,
@@ -36,7 +32,6 @@ jest.mock('react-native', () => {
   rn.useWindowDimensions = () => ({ width: 390, height: 844 })
   rn.NativeModules.AudioSessionModule = {}
   rn.NativeModules.PitchDetectorModule = { addListener: jest.fn(), removeListeners: jest.fn() }
-  // PanResponder is a lazy getter with no setter — use defineProperty to override
   Object.defineProperty(rn, 'PanResponder', {
     value: {
       create: (config: any) => {
@@ -65,6 +60,7 @@ const BASE_PROPS = {
   minNote: 'C3',
   maxNote: 'C6',
   duration: 6,
+  totalDuration: 60,
 }
 
 function simulatePan(dx: number, dy: number) {
@@ -97,148 +93,158 @@ describe('rendering', () => {
   })
 })
 
-// 2. 时间窗口 — playing
+// 2. 录制中（anchor = currentTime）
 // ─────────────────────────────────────────────────────────────────────────────
-describe('时间窗口（playing）', () => {
-  it('录音中红线居中：endTime = max(duration, currentTime + duration/2)', () => {
-    // currentTime=3, duration=6 → recordingViewportEnd = max(6, 3+3) = 6
-    render(<PitchChart {...BASE_PROPS} currentTime={3} paused={false} />)
-    expect(lastPitchCanvasProps.endTime).toBeCloseTo(6, 5)
+describe('录制中 anchor=currentTime', () => {
+  it('Phase1：currentTime=2，视口 [0,6]，红线在 2', () => {
+    render(<PitchChart {...BASE_PROPS} currentTime={2} paused={false} />)
+    expect(lastPitchCanvasProps.startTime).toBeCloseTo(0)
+    expect(lastPitchCanvasProps.endTime).toBeCloseTo(6)
+    expect(lastPitchCanvasProps.currentTimeLine).toBe(2)
   })
 
-  it('currentTime 超过数据时，endTime 跟随 currentTime', () => {
-    render(<PitchChart {...BASE_PROPS} currentTime={15} paused={false} />)
-    expect(lastPitchCanvasProps.endTime).toBeGreaterThanOrEqual(15)
+  it('Phase2：currentTime=10，视口 [7,13]，红线在 10（居中）', () => {
+    render(<PitchChart {...BASE_PROPS} currentTime={10} paused={false} />)
+    expect(lastPitchCanvasProps.startTime).toBeCloseTo(7)
+    expect(lastPitchCanvasProps.endTime).toBeCloseTo(13)
+    expect(lastPitchCanvasProps.currentTimeLine).toBe(10)
   })
 
-  it('数据不足时，endTime 至少等于 duration', () => {
-    render(<PitchChart data={makePitchData(2)} minNote="C3" maxNote="C6" duration={6} currentTime={1} paused={false} />)
-    expect(lastPitchCanvasProps.endTime).toBeGreaterThanOrEqual(6)
+  it('Phase3：currentTime=58，视口钉在 [54,60]，红线在 58', () => {
+    render(<PitchChart {...BASE_PROPS} currentTime={58} paused={false} />)
+    expect(lastPitchCanvasProps.startTime).toBeCloseTo(54)
+    expect(lastPitchCanvasProps.endTime).toBeCloseTo(60)
+    expect(lastPitchCanvasProps.currentTimeLine).toBe(58)
   })
 
-  it('时间窗口宽度始终等于 duration', () => {
-    render(<PitchChart {...BASE_PROPS} currentTime={5} paused={false} />)
-    const { startTime, endTime } = lastPitchCanvasProps
-    expect(endTime - startTime).toBeCloseTo(6, 5)
+  it('currentTime=60（到达上限）：视口 [54,60]，红线在右边缘', () => {
+    render(<PitchChart {...BASE_PROPS} currentTime={60} paused={false} />)
+    expect(lastPitchCanvasProps.endTime).toBeCloseTo(60)
+    expect(lastPitchCanvasProps.currentTimeLine).toBe(60)
   })
 
   it('startTime 不低于 0', () => {
     render(<PitchChart {...BASE_PROPS} currentTime={1} paused={false} />)
     expect(lastPitchCanvasProps.startTime).toBeGreaterThanOrEqual(0)
   })
+
+  it('视口宽度始终等于 duration', () => {
+    render(<PitchChart {...BASE_PROPS} currentTime={20} paused={false} />)
+    expect(lastPitchCanvasProps.endTime - lastPitchCanvasProps.startTime).toBeCloseTo(6)
+  })
 })
 
-// 3. 时间窗口 — paused + seekable
+// 3. 暂停切换：视口无跳变
 // ─────────────────────────────────────────────────────────────────────────────
-describe('时间窗口（paused + seekable）', () => {
-  it('未拖动时视口以 currentTime 为中心（endTime = recordingViewportEnd）', () => {
-    // currentTime=10, duration=6 → recordingViewportEnd = max(6, 10+3) = 13
-    render(<PitchChart {...BASE_PROPS} currentTime={10} paused seekable />)
-    expect(lastPitchCanvasProps.endTime).toBeCloseTo(13, 0)
+describe('暂停切换时视口无跳变', () => {
+  it('Phase2 暂停：seekTime 初始化为 currentTime，endTime 不变', () => {
+    render(<PitchChart {...BASE_PROPS} currentTime={30} paused={false} seekable={false} />)
+    const endTimePlaying = lastPitchCanvasProps.endTime
+
+    render(<PitchChart {...BASE_PROPS} currentTime={30} paused seekable />)
+    expect(lastPitchCanvasProps.endTime).toBeCloseTo(endTimePlaying)
   })
 
-  it('向右拖（dx > 0）视口向历史方向移动，startTime 减小', () => {
-    const { rerender } = render(
-      <PitchChart {...BASE_PROPS} currentTime={10} paused seekable />
-    )
-    const startTimeBefore = lastPitchCanvasProps.startTime
+  it('Phase3 末尾自动停止：暂停后红线仍在右边缘', () => {
+    render(<PitchChart {...BASE_PROPS} currentTime={60} paused seekable />)
+    expect(lastPitchCanvasProps.endTime).toBeCloseTo(60)
+    expect(lastPitchCanvasProps.currentTimeLine).toBe(60)
+  })
+})
 
-    simulatePan(100, 0) // 向右拖
-    rerender(<PitchChart {...BASE_PROPS} currentTime={10} paused seekable />)
+// 4. 暂停后拖动（anchor = seekTime）
+// ─────────────────────────────────────────────────────────────────────────────
+describe('暂停后拖动：seekTime 驱动视口和红线', () => {
+  it('向右拖（dx>0）：seekTime 减小，红线跟随左移', () => {
+    render(<PitchChart {...BASE_PROPS} currentTime={60} paused seekable />)
+    const timelineBefore = lastPitchCanvasProps.currentTimeLine  // = 60
 
-    expect(lastPitchCanvasProps.startTime).toBeLessThan(startTimeBefore)
+    simulatePan(100, 0)  // act 内部已触发 re-render
+
+    expect(lastPitchCanvasProps.currentTimeLine).toBeLessThan(timelineBefore)
+  })
+
+  it('大幅向右拖后进入 Phase2：endTime 小于 totalDuration，视口宽度仍为 duration', () => {
+    render(<PitchChart {...BASE_PROPS} currentTime={60} paused seekable />)
+    simulatePan(9999, 0)  // 拖到 Phase1，endTime 必然 < totalDuration
+
+    const { startTime, endTime } = lastPitchCanvasProps
+    expect(endTime).toBeLessThan(60)
+    expect(endTime - startTime).toBeCloseTo(6, 1)
   })
 
   it('startTime 不低于 0（拖到头不越界）', () => {
-    render(<PitchChart {...BASE_PROPS} currentTime={10} paused seekable />)
+    render(<PitchChart {...BASE_PROPS} currentTime={60} paused seekable />)
     simulatePan(99999, 0)
 
-    render(<PitchChart {...BASE_PROPS} currentTime={10} paused seekable />)
+    render(<PitchChart {...BASE_PROPS} currentTime={60} paused seekable />)
     expect(lastPitchCanvasProps.startTime).toBeGreaterThanOrEqual(0)
   })
 
-  it('endTime 不超过 recordingViewportEnd（拖不到未来）', () => {
-    // currentTime=10, duration=6 → maxSeekTime = recordingViewportEnd = 13
-    render(<PitchChart {...BASE_PROPS} currentTime={10} paused seekable />)
-    simulatePan(-99999, 0) // 向左拖（往未来方向）
+  it('向左拖（dx<0）：seekTime 增大，不超过 totalDuration', () => {
+    render(<PitchChart {...BASE_PROPS} currentTime={30} paused seekable />)
+    simulatePan(-99999, 0)
 
-    render(<PitchChart {...BASE_PROPS} currentTime={10} paused seekable />)
-    expect(lastPitchCanvasProps.endTime).toBeLessThanOrEqual(13 + 0.01)
+    render(<PitchChart {...BASE_PROPS} currentTime={30} paused seekable />)
+    expect(lastPitchCanvasProps.endTime).toBeLessThanOrEqual(60 + 0.01)
+  })
+
+  it('竖向拖动不影响视口', () => {
+    render(<PitchChart {...BASE_PROPS} currentTime={60} paused seekable />)
+    const endTimeBefore = lastPitchCanvasProps.endTime
+
+    simulatePan(2, 100) // dy 远大于 dx
+
+    render(<PitchChart {...BASE_PROPS} currentTime={60} paused seekable />)
+    expect(lastPitchCanvasProps.endTime).toBeCloseTo(endTimeBefore)
+  })
+
+  it('playing 状态下拖动不改变视口（seekable=false）', () => {
+    render(<PitchChart {...BASE_PROPS} currentTime={30} paused={false} seekable={false} />)
+    const endTimeBefore = lastPitchCanvasProps.endTime
+
+    simulatePan(100, 0)
+
+    render(<PitchChart {...BASE_PROPS} currentTime={30} paused={false} seekable={false} />)
+    expect(lastPitchCanvasProps.endTime).toBeCloseTo(endTimeBefore)
   })
 })
 
-// 4. 红线（currentTimeLine）
+// 5. onSeekChange 上报 seekTime（红线位置）
 // ─────────────────────────────────────────────────────────────────────────────
-describe('红线', () => {
-  it('currentTime 传入后 PitchCanvas 收到 currentTimeLine', () => {
-    render(<PitchChart {...BASE_PROPS} currentTime={5} />)
-    expect(lastPitchCanvasProps.currentTimeLine).toBe(5)
+describe('onSeekChange 上报 seekTime（红线位置）', () => {
+  it('拖动后 onSeekChange 上报的值等于 currentTimeLine（红线位置）', () => {
+    const onSeekChange = jest.fn()
+    render(<PitchChart {...BASE_PROPS} currentTime={60} paused seekable onSeekChange={onSeekChange} />)
+    simulatePan(100, 0)  // act 内已 re-render
+
+    const reported = onSeekChange.mock.calls.at(-1)?.[0]
+    expect(reported).toBeCloseTo(lastPitchCanvasProps.currentTimeLine, 1)
   })
 
-  it('不传 currentTime 时 currentTimeLine 为 undefined', () => {
-    render(<PitchChart {...BASE_PROPS} />)
-    expect(lastPitchCanvasProps.currentTimeLine).toBeUndefined()
+  it('onSeekChange 上报值 >= 0', () => {
+    const onSeekChange = jest.fn()
+    render(<PitchChart {...BASE_PROPS} currentTime={60} paused seekable onSeekChange={onSeekChange} />)
+    simulatePan(99999, 0)
+    expect(onSeekChange.mock.calls.at(-1)?.[0]).toBeGreaterThanOrEqual(0)
   })
 
-  it('paused 时红线位置仍为 currentTime（不受拖动影响）', () => {
-    render(<PitchChart {...BASE_PROPS} currentTime={7} paused seekable />)
-    simulatePan(100, 0) // 视口移动
-    render(<PitchChart {...BASE_PROPS} currentTime={7} paused seekable />)
-    // 红线仍然是 currentTime=7，不是视口位置
-    expect(lastPitchCanvasProps.currentTimeLine).toBe(7)
-  })
-})
-
-// 5. seekable + onSeekChange
-// ─────────────────────────────────────────────────────────────────────────────
-describe('onSeekChange', () => {
-  it('seekable=false 时横向拖动不触发 onSeekChange', () => {
+  it('seekable=false 时拖动不触发 onSeekChange', () => {
     const onSeekChange = jest.fn()
     render(<PitchChart {...BASE_PROPS} seekable={false} onSeekChange={onSeekChange} paused />)
     simulatePan(100, 0)
     expect(onSeekChange).not.toHaveBeenCalled()
   })
 
-  it('seekable=true 时横向拖动触发 onSeekChange', () => {
+  it('竖向拖动不触发 onSeekChange', () => {
     const onSeekChange = jest.fn()
     render(<PitchChart {...BASE_PROPS} seekable onSeekChange={onSeekChange} paused />)
-    simulatePan(100, 2) // dx 远大于 dy → 水平方向锁定
-    expect(onSeekChange).toHaveBeenCalled()
-  })
-
-  it('竖向拖动不触发 onSeekChange（即使 seekable=true）', () => {
-    const onSeekChange = jest.fn()
-    render(<PitchChart {...BASE_PROPS} seekable onSeekChange={onSeekChange} paused />)
-    simulatePan(2, 100) // dy 远大于 dx → 竖直方向锁定
-    expect(onSeekChange).not.toHaveBeenCalled()
-  })
-
-  it('onSeekChange 上报的 time 是当前视口的 startTime', () => {
-    const onSeekChange = jest.fn()
-    render(<PitchChart {...BASE_PROPS} seekable onSeekChange={onSeekChange} paused />)
-    simulatePan(100, 0)
-
-    const reportedTime = onSeekChange.mock.calls[0]?.[0]
-    expect(reportedTime).toBeGreaterThanOrEqual(0)
-    expect(typeof reportedTime).toBe('number')
-  })
-
-  it('onSeekChange 上报的 time >= 0（不越过起点）', () => {
-    const onSeekChange = jest.fn()
-    render(<PitchChart {...BASE_PROPS} seekable onSeekChange={onSeekChange} paused />)
-    simulatePan(99999, 0)
-    expect(onSeekChange.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(0)
-  })
-
-  it('playing 状态下横向拖动不触发 onSeekChange', () => {
-    const onSeekChange = jest.fn()
-    render(<PitchChart {...BASE_PROPS} seekable onSeekChange={onSeekChange} paused={false} />)
-    simulatePan(100, 0)
+    simulatePan(2, 100)
     expect(onSeekChange).not.toHaveBeenCalled()
   })
 })
 
-// 6. Props 向下透传给 PitchCanvas
+// 6. props 透传
 // ─────────────────────────────────────────────────────────────────────────────
 describe('props 透传', () => {
   it('leftDisplay 和 rightDisplay 透传到 PitchCanvas', () => {
@@ -249,7 +255,6 @@ describe('props 透传', () => {
 
   it('minMidi 和 maxMidi 由 minNote/maxNote 正确计算', () => {
     render(<PitchChart data={[]} minNote="C4" maxNote="C5" />)
-    // C4 = MIDI 60, C5 = MIDI 72
     expect(lastPitchCanvasProps.minMidi).toBe(60)
     expect(lastPitchCanvasProps.maxMidi).toBe(72)
   })

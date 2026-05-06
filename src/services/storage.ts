@@ -42,11 +42,12 @@ export async function initStorage(): Promise<void> {
 export async function loadUserSettings(): Promise<UserSettings> {
   try {
     const data = await AsyncStorage.getItem(SETTINGS_KEY)
-    if (data) {
-      // 与默认值合并，保证旧数据也能获得新字段
-      return { ...defaultSettings, ...JSON.parse(data) }
+    const settings: UserSettings = data ? { ...defaultSettings, ...JSON.parse(data) } : defaultSettings
+    // release 包不支持 1 分钟测试选项，存量数据自动升到默认值
+    if (!__DEV__ && settings.recordingDurationLimit < 120) {
+      settings.recordingDurationLimit = defaultSettings.recordingDurationLimit
     }
-    return defaultSettings
+    return settings
   } catch (error) {
     console.error('Failed to load settings:', error)
     return defaultSettings

@@ -81,6 +81,7 @@ export function useRecording({
       setReachedDurationLimit(false)
       audioService.setOnMaxDurationReached(() => {
         clearTimer()
+        setRecordingTime(recordingDurationLimit)  // 精确钉在上限，避免定时器浮点误差导致红线越界
         setReachedDurationLimit(true)
         setRecordingState('paused')
         audioService.pauseRecording().catch(console.error)

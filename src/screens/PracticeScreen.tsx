@@ -160,6 +160,7 @@ export function PracticeScreen({ navigation }: any) {
               currentTime={recording.recordingTime}
               paused={recording.recordingState === 'paused'}
               seekable={recording.recordingState === 'paused'}
+              totalDuration={recordingDurationLimit > 0 ? recordingDurationLimit : 0}
               leftDisplay={leftYAxisDisplay}
               rightDisplay={rightYAxisDisplay}
               showBothYAxes={showBothYAxes}

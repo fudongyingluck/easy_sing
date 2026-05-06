@@ -2,7 +2,10 @@ import React, { memo, useRef } from 'react'
 import { View, StyleSheet, Text } from 'react-native'
 import Svg, { Line, Text as SvgText, Path, Circle, Rect, Defs, LinearGradient, Stop, ClipPath, G } from 'react-native-svg'
 import { PitchDataPoint } from '../types'
-import { noteNameToMidi, midiToNoteName, freqToMidi } from '../utils/noteUtils'
+import { noteNameToMidi, midiToNoteName } from '../utils/noteUtils'
+
+// 绘图专用：保留浮点精度，使音高点可定位到半音之间（不同于 noteUtils 的取整版本）
+const freqToMidi = (freq: number) => 12 * Math.log2(freq / 440) + 69
 import { useTheme } from '../context/ThemeContext'
 
 export const X_AXIS_HEIGHT = 30
