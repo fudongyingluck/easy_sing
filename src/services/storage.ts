@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import RNFS from 'react-native-fs'
 import { UserSettings, Recording, PitchData, Mode } from '../types'
 import { PRESET_MODES } from '../config/constants'
+import { nativePitchRecorder } from './nativePitchRecorder'
 
 // Storage keys
 const SETTINGS_KEY = '@pitchperfect:settings'
@@ -20,6 +21,7 @@ const defaultSettings: UserSettings = {
   rightYAxisDisplay: 'english',
   showBothYAxes: true,
   themeMode: 'system',
+  rememberLastTemplate: false,
 }
 
 // 初始化存储
@@ -40,11 +42,12 @@ export async function initStorage(): Promise<void> {
 export async function loadUserSettings(): Promise<UserSettings> {
   try {
     const data = await AsyncStorage.getItem(SETTINGS_KEY)
-    if (data) {
-      // 与默认值合并，保证旧数据也能获得新字段
-      return { ...defaultSettings, ...JSON.parse(data) }
+    const settings: UserSettings = data ? { ...defaultSettings, ...JSON.parse(data) } : defaultSettings
+    // release 包不支持 1 分钟测试选项，存量数据自动升到默认值
+    if (!__DEV__ && settings.recordingDurationLimit < 120) {
+      settings.recordingDurationLimit = defaultSettings.recordingDurationLimit
     }
-    return defaultSettings
+    return settings
   } catch (error) {
     console.error('Failed to load settings:', error)
     return defaultSettings
@@ -106,7 +109,10 @@ export async function loadPitchData(filePath: string): Promise<PitchData | null>
   try {
     const data = await AsyncStorage.getItem(filePath)
     if (data) {
-      return JSON.parse(data)
+      const parsed = JSON.parse(data)
+      // 兼容旧数据：删除不再使用的 sampleRate 字段
+      delete parsed.sampleRate
+      return parsed
     }
     return null
   } catch (error) {
@@ -136,15 +142,22 @@ export async function deleteRecordingFiles(recording: Recording): Promise<void> 
   }
 }
 
-// 获取录音文件路径
-export function getRecordingPath(recordingId: string): string {
-  // 实际应用中应该返回文件系统路径
-  return `${recordingId}.mp3`
-}
-
-// 获取音高数据文件路径
-export function getPitchDataPath(recordingId: string): string {
-  return `@pitchperfect:pitch:${recordingId}`
+/**
+ * 解析音频文件的当前有效绝对路径（单一出口）。
+ *
+ * ⚠️ 不要绕过这个函数直接使用存储的路径：
+ *   iOS 沙盒 UUID 随应用更新/重装变化，直接使用旧绝对路径会报错。
+ *
+ * 规则：
+ *   - 包含 /Imports/ 的路径（外部导入文件）→ 直接返回，路径由我们写入沙盒，始终有效
+ *   - 其他路径（录音文件）→ 提取文件名，走 resolveRecordingPath 获取当前有效路径
+ */
+export async function resolveAudioPath(filePath: string): Promise<string> {
+  if (filePath.includes('/Imports/')) {
+    return filePath
+  }
+  const filename = filePath.split('/').pop() ?? filePath
+  return nativePitchRecorder.resolveRecordingPath(filename)
 }
 
 // 计算存储使用量

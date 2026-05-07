@@ -8,7 +8,6 @@ export interface PitchDataPoint {
 // 音高数据文件
 export interface PitchData {
   version: number
-  sampleRate: number  // 每秒数据点数
   duration: number    // 总时长（秒）
   data: PitchDataPoint[]
 }
@@ -51,6 +50,27 @@ export interface UserSettings {
   rightYAxisDisplay: 'english' | 'solfege' | 'number'
   showBothYAxes: boolean
   themeMode: 'light' | 'dark' | 'system'
+  // 模板
+  rememberLastTemplate: boolean
+}
+
+// 音高模板
+export interface PitchTemplate {
+  id: string
+  name: string
+  sourceFileName: string        // 原始文件名，仅展示用
+  audioFilePath: string         // 文件名（不含目录），结合 audioSource 解析完整路径
+  audioSource?: 'file' | 'exist_record' | 'deleted_record'
+  // file          - 从外部文件导入，音频在 Imports/
+  // exist_record  - 从录音历史创建，音频在 Recordings/（录音仍存在）
+  // deleted_record - 录音已删除并选择「保留模板」，音频已复制到 Imports/
+  // undefined     - 旧数据兼容，视为 'file'
+  pitchDataKey: string          // AsyncStorage key
+  duration: number              // 秒
+  createTime: string            // ISO 日期字符串
+  minNote?: string              // 音高范围下限（如 "C3"），分析时写入
+  maxNote?: string              // 音高范围上限（如 "C6"），分析时写入
+  sourceRecordingId?: string    // 若来源为录音转换，记录原录音 id
 }
 
 // 应用状态

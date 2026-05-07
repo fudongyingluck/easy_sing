@@ -99,9 +99,7 @@ paused → (点击保存/放弃) → idle
 
 - **`PitchCanvas`**：纯渲染组件（`React.memo`），接收预处理好的时间区间和数据，画网格、曲线、坐标标签。`PADDING` 和 `pixelsPerSemitone` 从此文件导出，供上层计算 `svgHeight`。
 - **`PitchChart`**：录音实时曲线，时间窗口自动跟随最新数据，只支持竖向滚动。
-- **`RecordingPitchChart`**：历史录音回放曲线，paused 时支持横向拖拽 seek，playing 时跟随 `currentTime`。
-
-> ⚠️ 待重构：`PitchChart` 和 `RecordingPitchChart` 计划合并为同一组件。见 todo.md 和下方「交互行为设计」。
+- **`PlaybackPitchChart`**：历史录音回放曲线，paused 时支持横向拖拽 seek，playing 时跟随 `currentTime`。
 
 **组件 API（合并后）**：
 ```tsx
@@ -167,7 +165,8 @@ paused → (点击保存/放弃) → idle
 底部 Tab 导航（react-navigation）：
 - Tab 1：练习页（PracticeScreen）
 - Tab 2：历史记录（RecordingsScreen）
-- Tab 3：设置（SettingsScreen，内含二级页面 Modes）
+- Tab 3：模板（TemplatesScreen）
+- Tab 4：设置（SettingsScreen，内含二级页面 Modes）
 
 各 Tab 通过 `navigation.addListener('focus', ...)` 在切换时重新加载数据。
 

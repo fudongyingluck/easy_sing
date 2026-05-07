@@ -76,7 +76,7 @@ export function PlaybackPitchChart({
     return t - half
   }
 
-  // 播放中：viewport 跟随 currentTime
+  // 播放中：同步 viewportAnim，供暂停后拖动的起点使用
   useEffect(() => {
     if (isPlaying) {
       viewportAnim.setValue(computeNaturalViewport(currentTime))
@@ -89,6 +89,12 @@ export function PlaybackPitchChart({
       viewportAnim.setValue(computeNaturalViewport(currentTime))
     }
   }, [currentTime])
+
+  // 播放中直接从 currentTime 派生 viewport，避免 state 异步延迟导致红线 tearing
+  // 拖动/暂停时使用 Animated 驱动的 viewportStart state（保留拖动弹簧动画）
+  const effectiveViewportStart = (isPlaying && !isDraggingCanvas.current)
+    ? computeNaturalViewport(currentTime)
+    : viewportStart
 
   // 尺寸
   const minMidi = noteNameToMidi(minNote)
@@ -104,7 +110,7 @@ export function PlaybackPitchChart({
     PADDING.left,
     Math.min(
       PADDING.left + chartWidth,
-      PADDING.left + ((currentTime - viewportStart) / SECONDS_PER_SCREEN) * chartWidth,
+      PADDING.left + ((currentTime - effectiveViewportStart) / SECONDS_PER_SCREEN) * chartWidth,
     ),
   )
 
@@ -136,7 +142,10 @@ export function PlaybackPitchChart({
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: () => {
       viewportAnim.stopAnimation()
-      panStartViewport.current = viewportStartRef.current
+      // 播放中 ref 可能滞后一帧，直接计算当前正确值
+      panStartViewport.current = isPlayingRef.current
+        ? computeNaturalViewport(currentTimeRef.current)
+        : viewportStartRef.current
       panStartScrollY.current = actualScrollY.current
       panStartCurrentTime.current = currentTimeRef.current
       isDraggingCanvas.current = false
@@ -205,7 +214,7 @@ export function PlaybackPitchChart({
     }
   }
 
-  const viewportEnd = viewportStart + SECONDS_PER_SCREEN
+  const viewportEnd = effectiveViewportStart + SECONDS_PER_SCREEN
 
   return (
     <View style={[styles.container, { height: chartHeight, width: windowWidth, backgroundColor: colors.chartBackground }]}>
@@ -220,7 +229,7 @@ export function PlaybackPitchChart({
       >
         <PitchCanvas
           data={data}
-          startTime={viewportStart}
+          startTime={effectiveViewportStart}
           endTime={viewportEnd}
           minMidi={minMidi}
           maxMidi={maxMidi}
@@ -233,7 +242,7 @@ export function PlaybackPitchChart({
         />
       </ScrollView>
 
-      <PitchXAxis startTime={viewportStart} endTime={viewportEnd} width={windowWidth} />
+      <PitchXAxis startTime={effectiveViewportStart} endTime={viewportEnd} width={windowWidth} />
 
       {/* 红线 overlay：position absolute，clamp 后永远可见 */}
       <View

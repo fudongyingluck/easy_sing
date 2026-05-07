@@ -4,13 +4,14 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from 'react-native-vector-icons/Ionicons'
 import { Recording, PitchDataPoint } from '../types'
 import { loadRecordings, saveRecordings, deleteRecordingFiles, loadPitchData } from '../services/storage'
+import { findTemplatesReferencingRecording, migrateTemplateToImport, deleteTemplate, loadTemplates } from '../services/templateStorage'
 import { audioService } from '../services/audio'
 import { nativePitchRecorder } from '../services/nativePitchRecorder'
 import { PlaybackPitchChart } from '../components/PlaybackPitchChart'
 import { freqToMidi, midiToNoteName } from '../utils/noteUtils'
 import { useTheme } from '../context/ThemeContext'
 
-export function RecordingsScreen({ navigation }: any) {
+export function RecordingsScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets()
   const { colors } = useTheme()
   const [recordings, setRecordings] = useState<Recording[]>([])
@@ -120,10 +121,10 @@ export function RecordingsScreen({ navigation }: any) {
   }
 
   // 开始播放（内部，可复用）
-  const startAudio = async (recording: Recording) => {
+  const startAudio = async (recording: Recording, startTime = 0) => {
     setIsPlaying(true)
     try {
-      await audioService.playAudio(recording.audioFilePath, (time) => setCurrentTime(time))
+      await audioService.playAudio(recording.audioFilePath, (time) => setCurrentTime(time), startTime)
     } catch (error: any) {
       console.error('Failed to play recording:', error)
       const isNotFound = error?.code?.includes('2003334207') || error?.code?.includes('ENOENT')
@@ -165,13 +166,19 @@ export function RecordingsScreen({ navigation }: any) {
       setIsPlaying(true)
       audioService.resumePlayback((time) => setCurrentTime(time))
     } else if (activeRecording) {
-      // 播放已自然结束 → 从头重放
-      setCurrentTime(0)
-      await startAudio(activeRecording)
+      // 无 sound 对象（首次播放或播放自然结束后）→ 从当前 currentTime 位置开始
+      await startAudio(activeRecording, currentTime)
     }
   }
 
+  const pickMode = route.params?.pickMode === true
+
   const onRecordingPress = (recording: Recording) => {
+    if (pickMode) {
+      navigation.navigate('Templates', { pickedRecordingId: recording.id })
+      navigation.setParams({ pickMode: undefined })
+      return
+    }
     if (isSelectionMode) { toggleSelection(recording.id); return }
     openPlayer(recording)
   }
@@ -210,47 +217,120 @@ export function RecordingsScreen({ navigation }: any) {
 
   const deleteRecording = async (recording: Recording) => {
     if (isSelectionMode) { toggleSelection(recording.id); return }
-    Alert.alert('确认删除', `确定要删除录音"${recording.name}"吗？`, [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '删除', style: 'destructive',
-        onPress: async () => {
-          if (activeRecording?.id === recording.id) closePlayer()
-          await deleteRecordingFiles(recording)
-          const updatedList = recordings.filter(r => r.id !== recording.id)
-          await saveRecordings(updatedList)
-          setRecordings(updatedList)
+
+    const doDelete = async (keepTemplates: boolean, referencingTemplates: Awaited<ReturnType<typeof findTemplatesReferencingRecording>>) => {
+      if (activeRecording?.id === recording.id) closePlayer()
+      if (keepTemplates) {
+        const fullPath = await nativePitchRecorder.resolveRecordingPath(
+          recording.audioFilePath.split('/').pop() ?? recording.audioFilePath
+        )
+        for (const t of referencingTemplates) {
+          await migrateTemplateToImport(t, fullPath)
+        }
+      } else {
+        for (const t of referencingTemplates) {
+          await deleteTemplate(t)
         }
       }
-    ])
+      await deleteRecordingFiles(recording)
+      const updatedList = recordings.filter(r => r.id !== recording.id)
+      await saveRecordings(updatedList)
+      setRecordings(updatedList)
+    }
+
+    const referencingTemplates = await findTemplatesReferencingRecording(recording.id)
+
+    if (referencingTemplates.length === 0) {
+      Alert.alert('删除确认', `确定要删除录音"${recording.name}"吗？`, [
+        { text: '取消', style: 'cancel' },
+        { text: '删除', style: 'destructive', onPress: () => doDelete(false, []) },
+      ])
+    } else {
+      const templateNames = referencingTemplates.map(t => t.name).join('、')
+      Alert.alert(
+        '删除确认',
+        `该录音已被设置为模板 ${templateNames}，删除录音和模板？`,
+        [
+          { text: '取消' },
+          { text: '同时删除', style: 'destructive', onPress: () => doDelete(false, referencingTemplates) },
+          { text: '保留模板', onPress: () => doDelete(true, referencingTemplates) },
+        ]
+      )
+    }
   }
 
   const deleteSelected = async () => {
     if (selectedIds.size === 0) return
-    Alert.alert('确认删除', `确定要删除选中的 ${selectedIds.size} 个录音吗？`, [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '删除', style: 'destructive',
-        onPress: async () => {
-          if (activeRecording && selectedIds.has(activeRecording.id)) closePlayer()
-          for (const id of Array.from(selectedIds)) {
-            const rec = recordings.find(r => r.id === id)
-            if (rec) await deleteRecordingFiles(rec)
+
+    const selectedRecordings = recordings.filter(r => selectedIds.has(r.id))
+    const allTemplates = await loadTemplates()
+    const referencedPairs: { recording: Recording; templates: typeof allTemplates }[] = []
+    for (const rec of selectedRecordings) {
+      const matched = allTemplates.filter(t => t.sourceRecordingId === rec.id)
+      if (matched.length > 0) referencedPairs.push({ recording: rec, templates: matched })
+    }
+    const totalTemplateCount = referencedPairs.reduce((sum, p) => sum + p.templates.length, 0)
+
+    const doDeleteSelected = async (keepTemplates: boolean) => {
+      if (activeRecording && selectedIds.has(activeRecording.id)) closePlayer()
+      for (const { recording, templates } of referencedPairs) {
+        if (keepTemplates) {
+          const fullPath = await nativePitchRecorder.resolveRecordingPath(
+            recording.audioFilePath.split('/').pop() ?? recording.audioFilePath
+          )
+          for (const t of templates) {
+            await migrateTemplateToImport(t, fullPath)
           }
-          const updatedList = recordings.filter(r => !selectedIds.has(r.id))
-          await saveRecordings(updatedList)
-          setRecordings(updatedList)
-          setSelectedIds(new Set())
-          setIsSelectionMode(false)
+        } else {
+          for (const t of templates) {
+            await deleteTemplate(t)
+          }
         }
       }
-    ])
+      for (const rec of selectedRecordings) {
+        await deleteRecordingFiles(rec)
+      }
+      const updatedList = recordings.filter(r => !selectedIds.has(r.id))
+      await saveRecordings(updatedList)
+      setRecordings(updatedList)
+      setSelectedIds(new Set())
+      setIsSelectionMode(false)
+    }
+
+    if (totalTemplateCount === 0) {
+      Alert.alert('删除确认', `确定要删除选中的 ${selectedIds.size} 个录音吗？`, [
+        { text: '取消', style: 'cancel' },
+        { text: '删除', style: 'destructive', onPress: () => doDeleteSelected(false) },
+      ])
+    } else {
+      const templateNames = referencedPairs.flatMap(p => p.templates).map(t => t.name).join('、')
+      Alert.alert(
+        '删除确认',
+        `该录音已被设置为模板 ${templateNames}，删除录音和模板？`,
+        [
+          { text: '取消' },
+          { text: '同时删除', style: 'destructive', onPress: () => doDeleteSelected(false) },
+          { text: '保留模板', onPress: () => doDeleteSelected(true) },
+        ]
+      )
+    }
   }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        {isSelectionMode ? (
+        {pickMode ? (
+          <>
+            <TouchableOpacity onPress={() => {
+              navigation.setParams({ pickMode: undefined })
+              navigation.navigate('Templates')
+            }}>
+              <Text style={styles.headerAction}>取消</Text>
+            </TouchableOpacity>
+            <Text style={[styles.title, { color: colors.text }]}>选择录音作为模板</Text>
+            <View style={{ width: 60 }} />
+          </>
+        ) : isSelectionMode ? (
           <>
             <TouchableOpacity onPress={exitSelectionMode}>
               <Text style={styles.headerAction}>取消</Text>

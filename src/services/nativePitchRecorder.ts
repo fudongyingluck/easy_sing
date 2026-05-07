@@ -36,6 +36,10 @@ export const nativePitchRecorder = {
   resumeRecording: (): void =>
     PitchDetectorModule.resumeRecording(),
 
+  /** 分析音频文件，返回 10Hz 音高数据，最长 10 分钟 */
+  analyzeAudioFile: (filePath: string): Promise<{ points: Array<{ time: number; freq: number }>; duration: number }> =>
+    PitchDetectorModule.analyzeAudioFile(filePath),
+
   /** 订阅音高事件，返回可取消的订阅 */
   addPitchListener: (callback: (freq: number) => void) =>
     emitter.addListener('onPitchDetected', ({ freq }: { freq: number }) => callback(freq)),

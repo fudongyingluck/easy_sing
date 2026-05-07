@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Switch, Alert, Modal, TextInput
+  Switch, Alert, Modal, TextInput, Platform, NativeModules
 } from 'react-native'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -12,6 +12,16 @@ import { noteNameToMidi, noteNameToFreq } from '../utils/noteUtils'
 import { NotePicker } from '../components/NotePicker'
 import { UserSettings } from '../types'
 import { useTheme } from '../context/ThemeContext'
+
+type BuildInfo = { bundleId: string; appVersion: string; buildNumber: string; deviceId: string }
+let buildInfoPromise: Promise<BuildInfo | null> | null = null
+function getBuildInfo(): Promise<BuildInfo | null> {
+  if (!buildInfoPromise) {
+    const p = NativeModules.AudioSessionModule?.getBuildInfo?.() as Promise<BuildInfo> | undefined
+    buildInfoPromise = p ?? Promise.resolve(null)
+  }
+  return buildInfoPromise
+}
 
 // ─── SettingRow ───────────────────────────────────────────────────────────────
 
@@ -504,6 +514,10 @@ export function SettingsScreen() {
   const [activePicker, setActivePicker] = useState<string | null>(null)
   const [showFeedback, setShowFeedback] = useState(false)
   const [emailCopied, setEmailCopied] = useState(false)
+  const [showDebug, setShowDebug] = useState(false)
+  const [buildInfo, setBuildInfo] = useState<BuildInfo>({ bundleId: '', appVersion: '', buildNumber: '', deviceId: '' })
+  const debugTapCount = useRef(0)
+  const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const FEEDBACK_EMAIL = 'dongguafu@gmail.com'
 
@@ -513,8 +527,24 @@ export function SettingsScreen() {
     setTimeout(() => setEmailCopied(false), 2000)
   }
 
+  const handleDebugAreaTap = () => {
+    debugTapCount.current += 1
+    if (debugTapTimer.current) clearTimeout(debugTapTimer.current)
+    debugTapTimer.current = setTimeout(() => { debugTapCount.current = 0 }, 1000)
+    if (debugTapCount.current >= 3) {
+      debugTapCount.current = 0
+      setShowDebug(true)
+    }
+  }
+
   useEffect(() => {
-    loadUserSettings().then(setSettings)
+    Promise.all([loadUserSettings(), getBuildInfo()]).then(([s, info]) => {
+      setSettings(s)
+      if (info) setBuildInfo(info)
+    }).catch(console.error)
+    return () => {
+      if (debugTapTimer.current) clearTimeout(debugTapTimer.current)
+    }
   }, [])
 
   if (!settings) return null
@@ -600,6 +630,22 @@ export function SettingsScreen() {
           />
         </Section>
 
+        <Section title="模板">
+          <SettingRow
+            icon="musical-notes-outline" iconColor="#FF9500"
+            title="记住上次使用的模板"
+            rightNode={
+              <Switch
+                value={settings.rememberLastTemplate}
+                onValueChange={v => save({ ...settings, rememberLastTemplate: v })}
+                trackColor={{ false: '#C7C7CC', true: '#FF6B6B' }}
+                thumbColor="#fff"
+              />
+            }
+            isLast
+          />
+        </Section>
+
         <Section title="显示">
           <SettingRow
             icon="text-outline" iconColor="#007AFF"
@@ -639,7 +685,7 @@ export function SettingsScreen() {
         <Section title="关于">
           <SettingRow
             icon="information-circle-outline" iconColor="#8E8E93"
-            title="版本" value="v1.0"
+            title="版本" value={buildInfo.appVersion ? `v${buildInfo.appVersion} (${buildInfo.buildNumber})` : 'v1.0'}
           />
           <SettingRow
             icon="chatbubble-ellipses-outline" iconColor="#34C759"
@@ -648,6 +694,8 @@ export function SettingsScreen() {
             isLast
           />
         </Section>
+
+        <TouchableOpacity activeOpacity={1} onPress={handleDebugAreaTap} style={main.debugArea} />
       </ScrollView>
 
       <OptionPicker
@@ -682,7 +730,7 @@ export function SettingsScreen() {
         visible={activePicker === 'duration'}
         title="录音时长限制"
         options={[
-          { label: '1 分钟（测试用）', value: 60 },
+          ...(__DEV__ ? [{ label: '1 分钟（测试用）', value: 60 }] : []),
           { label: '5 分钟', value: 300 },
           { label: '10 分钟（默认）', value: 600 },
           { label: '30 分钟', value: 1800 },
@@ -727,6 +775,24 @@ export function SettingsScreen() {
         onClose={() => setActivePicker(null)}
       />
 
+      {/* 调试信息 Modal */}
+      <Modal visible={showDebug} transparent animationType="slide" onRequestClose={() => setShowDebug(false)}>
+        <TouchableOpacity style={fb.overlay} activeOpacity={1} onPress={() => setShowDebug(false)} />
+        <View style={[fb.sheet, { backgroundColor: colors.surface }]}>
+          <Text style={[fb.title, { color: colors.text }]}>调试信息</Text>
+          {[
+            { label: 'Bundle ID', value: buildInfo.bundleId },
+            { label: 'Platform', value: `iOS ${Platform.Version}` },
+            { label: 'Device ID', value: buildInfo.deviceId },
+          ].map(({ label, value }) => (
+            <TouchableOpacity key={label} onPress={() => { Clipboard.setString(value); Alert.alert('已复制', label) }}>
+              <Text style={[dbg.label, { color: colors.textSecondary }]}>{label}</Text>
+              <Text style={[dbg.value, { color: colors.text }]}>{value}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Modal>
+
       {/* 意见反馈 Modal */}
       <Modal visible={showFeedback} transparent animationType="slide" onRequestClose={() => setShowFeedback(false)}>
         <TouchableOpacity style={fb.overlay} activeOpacity={1} onPress={() => setShowFeedback(false)} />
@@ -766,6 +832,11 @@ const fb = StyleSheet.create({
   closeText: { fontSize: 16 },
 })
 
+const dbg = StyleSheet.create({
+  label: { fontSize: 12, marginTop: 12, marginBottom: 2 },
+  value: { fontSize: 14, fontFamily: 'Menlo', fontWeight: '500' },
+})
+
 const main = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7' },
   header: {
@@ -778,5 +849,6 @@ const main = StyleSheet.create({
     backgroundColor: '#F2F2F7',
   },
   headerTitle: { fontSize: 18, fontWeight: '700' },
-  scroll: { paddingTop: 20, paddingBottom: 40 },
+  scroll: { paddingTop: 20, paddingBottom: 0 },
+  debugArea: { height: 58, marginTop: -28 },
 })
