@@ -35,6 +35,18 @@
 
 ## Bug 列表
 
+### ~~5. 历史播放器：播放到末尾偶发不归零~~（已解决）
+- **状态**：✅ 已修复
+- **现象**：播放到自然结束后，`currentTime` 偶发停留在末尾而不回到 0，红线不复位
+- **根本原因**：竞态条件——`getCurrentTime` 的 native bridge 回调是异步的：
+  1. `setInterval` 触发 → `sound.getCurrentTime(cb)` 发消息给 native（异步）
+  2. `sound.play()` 完成回调触发 → `_clearPlayback()`（清 timer）→ `resolve()`
+  3. `finally: setCurrentTime(0)` 归零
+  4. native 响应 `getCurrentTime` → `onProgress(seconds)` → `setCurrentTime(seconds)` 把 0 覆盖回末尾时间
+  - 第 4 步发生在第 3 步之后，因为 native 的回程需要几毫秒，JS 线程在此期间已跑完归零逻辑
+- **修复方案**：在 `getCurrentTime` 回调内加 guard：`if (this.playbackSound === sound)`，sound 释放后到达的回调直接忽略。`=== sound` 比 `!= null` 更严格，可防止换歌时旧回调污染新进度
+- **涉及文件**：`src/services/audio.ts`（`playAudio` 和 `resumePlayback` 的 timer 回调）
+
 ### ~~4. 历史播放器：首次拖动后点播放从头开始~~（已解决）
 - **状态**：✅ 已修复
 - **现象**：

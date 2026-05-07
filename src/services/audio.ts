@@ -236,7 +236,9 @@ export class AudioService {
 
         if (onProgress) {
           this.playbackTimer = setInterval(() => {
-            sound.getCurrentTime((seconds: number) => onProgress(seconds))
+            sound.getCurrentTime((seconds: number) => {
+              if (this.playbackSound === sound) onProgress(seconds)
+            })
           }, 100)
         }
 
@@ -267,12 +269,14 @@ export class AudioService {
     if (!this.playbackSound) return
     this.activatePlaybackSession()
     if (this.playbackTimer) { clearInterval(this.playbackTimer); this.playbackTimer = null }
+    const resumedSound = this.playbackSound
     if (onProgress) {
       this.playbackTimer = setInterval(() => {
-        this.playbackSound?.getCurrentTime((seconds: number) => onProgress(seconds))
+        resumedSound.getCurrentTime((seconds: number) => {
+          if (this.playbackSound === resumedSound) onProgress(seconds)
+        })
       }, 100)
     }
-    const resumedSound = this.playbackSound
     resumedSound.play(() => {
       if (this.playbackSound !== resumedSound) return
       resumedSound.release()
