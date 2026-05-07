@@ -60,6 +60,24 @@ jest.mock('../../src/utils/audioUtils', () => ({
   },
 }))
 
+// react-native-sound mock：手动控制加载回调和播放回调，模拟异步加载完成
+let soundCallback: ((error: any) => void) | null = null
+let playCallback: ((success: boolean) => void) | null = null
+
+const mockSoundInstance = {
+  setCurrentTime: jest.fn(),
+  play: jest.fn().mockImplementation((cb: (s: boolean) => void) => { playCallback = cb }),
+  release: jest.fn(),
+  getCurrentTime: jest.fn(),
+}
+
+jest.mock('react-native-sound', () =>
+  jest.fn().mockImplementation((_path: string, _base: string, cb: (err: any) => void) => {
+    soundCallback = cb
+    return mockSoundInstance
+  })
+)
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 import { AudioService } from '../../src/services/audio'
@@ -77,6 +95,8 @@ describe('录音状态机', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     pitchCallback = null
+    soundCallback = null
+    playCallback = null
     service = new AudioService()
   })
 
@@ -216,5 +236,53 @@ describe('录音状态机', () => {
       expect(onUpdate).toHaveBeenCalled()
       jest.useRealTimers()
     })
+  })
+})
+
+// ─── playAudio startTime 行为 ────────────────────────────────────────────────
+//
+// 验证修复：历史播放器首次拖动后点播放，应从拖动位置而非 0 开始。
+// 核心路径：playAudio(path, onProgress, startTime) → sound.setCurrentTime(startTime)
+//
+describe('playAudio startTime', () => {
+  let service: AudioService
+
+  // 辅助：触发 sound 加载完成 + 播放完成，等待 playAudio resolve
+  const resolvePlay = async (playPromise: Promise<void>) => {
+    await Promise.resolve() // 等 resolveAudioPath 微任务完成
+    soundCallback!(null)    // 触发加载成功回调
+    playCallback!(true)     // 触发播放完成回调
+    await playPromise
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    soundCallback = null
+    playCallback = null
+    service = new AudioService()
+  })
+
+  it('不传 startTime：不调用 setCurrentTime，从头播放', async () => {
+    await resolvePlay(service.playAudio('test.wav'))
+    expect(mockSoundInstance.setCurrentTime).not.toHaveBeenCalled()
+  })
+
+  it('startTime = 0：不调用 setCurrentTime，从头播放', async () => {
+    await resolvePlay(service.playAudio('test.wav', undefined, 0))
+    expect(mockSoundInstance.setCurrentTime).not.toHaveBeenCalled()
+  })
+
+  it('startTime = 10：调用 setCurrentTime(10)，从 10s 开始', async () => {
+    await resolvePlay(service.playAudio('test.wav', undefined, 10))
+    expect(mockSoundInstance.setCurrentTime).toHaveBeenCalledWith(10)
+  })
+
+  it('播放进行中：hasPlayback() 返回 true（togglePlayPause 走 resume 分支的前提条件）', async () => {
+    const playPromise = service.playAudio('test.wav')
+    await Promise.resolve()
+    soundCallback!(null)
+    expect(service.hasPlayback()).toBe(true)
+    playCallback!(true)
+    await playPromise
   })
 })

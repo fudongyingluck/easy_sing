@@ -35,6 +35,21 @@
 
 ## Bug 列表
 
+### ~~4. 历史播放器：首次拖动后点播放从头开始~~（已解决）
+- **状态**：✅ 已修复
+- **现象**：
+  - 打开历史播放器，未播放时拖动红线到某位置，点播放 → 从 0 开始而非拖动位置
+  - 第二次拖动再播放则正常
+- **根本原因**：
+  - 未播放时没有 sound 对象，`seekTo` 是空操作，拖动只更新了 `currentTime` state
+  - `togglePlayPause` 第三个分支（无 sound 对象时）有一行多余的 `setCurrentTime(0)`，把拖动位置覆盖掉了
+  - `startAudio` 没有传 `startTime`，始终从 0 开始加载音频
+  - 第二次正常是因为第一次播放后 sound 对象还在（暂停状态），走的是 `resumePlayback` 分支，`seekTo` 有效
+- **修复方案**：
+  - `startAudio` 增加 `startTime` 参数，透传给 `audioService.playAudio`
+  - 第三个分支删掉多余的 `setCurrentTime(0)`，改为 `startAudio(activeRecording, currentTime)`
+- **涉及文件**：`src/screens/RecordingsScreen.tsx`（`startAudio` / `togglePlayPause`）
+
 ### 0. 录音中音高曲线和音频周期性掉段（待定位）
 - **状态**：🔍 原因未确认，待复现验证
 - **现象**：
@@ -184,6 +199,20 @@
 - ~~`template_design.md` 中 `audioSource` 枚举为 `'import' | 'recording'`~~（已更新为 `'file' | 'exist_record' | 'deleted_record'`）
 - ~~`implementation.md` 中导航结构写的是 3 个 Tab~~（已更新为 4 个 Tab）
 - ~~`implementation.md` 中引用的 `RecordingPitchChart`~~（已更新为 `PlaybackPitchChart`）
+
+---
+
+## 性能问题
+
+### P1. 历史播放时 currentTime state 每 100ms 触发一次全量 re-render
+- **状态**：🟡 已知问题，暂不影响使用
+- **现象**：播放录音时，`RecordingsScreen` 整个组件每秒重渲染 10 次
+- **根本原因**：
+  - `audio.ts` 的 `playAudio` 内部有 `setInterval(100ms)`，每次调用 `onProgress(seconds)`
+  - `onProgress` 直接是 `(time) => setCurrentTime(time)`，每次都触发 React state 更新
+  - state 更新导致 `RecordingsScreen` 整个组件树重渲染，包括进度条、按钮、列表等
+- **影响范围**：`src/screens/RecordingsScreen.tsx`、`src/services/audio.ts`
+- **优化方向**：用 ref 存储 `currentTime`，只在进度条和时间文字处单独订阅更新（如抽成独立子组件），避免整个 Screen 重渲染
 
 ---
 

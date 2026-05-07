@@ -121,10 +121,10 @@ export function RecordingsScreen({ navigation, route }: any) {
   }
 
   // 开始播放（内部，可复用）
-  const startAudio = async (recording: Recording) => {
+  const startAudio = async (recording: Recording, startTime = 0) => {
     setIsPlaying(true)
     try {
-      await audioService.playAudio(recording.audioFilePath, (time) => setCurrentTime(time))
+      await audioService.playAudio(recording.audioFilePath, (time) => setCurrentTime(time), startTime)
     } catch (error: any) {
       console.error('Failed to play recording:', error)
       const isNotFound = error?.code?.includes('2003334207') || error?.code?.includes('ENOENT')
@@ -166,9 +166,8 @@ export function RecordingsScreen({ navigation, route }: any) {
       setIsPlaying(true)
       audioService.resumePlayback((time) => setCurrentTime(time))
     } else if (activeRecording) {
-      // 播放已自然结束 → 从头重放
-      setCurrentTime(0)
-      await startAudio(activeRecording)
+      // 无 sound 对象（首次播放或播放自然结束后）→ 从当前 currentTime 位置开始
+      await startAudio(activeRecording, currentTime)
     }
   }
 
