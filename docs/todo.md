@@ -178,12 +178,13 @@
 - **现状**：`audio.ts` 里同时有 `startRecording/pauseRecording/stopRecording` 和 `playAudio/pausePlayback/resumePlayback/seekTo`，两个场景完全互斥但共处一类，`stopAll` 逻辑因此复杂
 - **修复方向**：拆分为 `RecordingService` 和 `PlaybackService`，或至少在类内部通过命名空间清晰隔离
 
-### CF1-4. 路径解析逻辑分散在三处
-- **现状**：
-  - `audio.ts` 里有 `resolveAudioPath()`
-  - `storage.ts` 里有 `getRecordingPath()` / `getPitchDataPath()`
-  - `nativePitchRecorder.ts` 里有 `resolveRecordingPath()`
-- **修复方向**：统一收拢到 `storage.ts` 或新建 `pathUtils.ts`，单一出口
+### ~~CF1-4. 路径解析逻辑分散在三处~~ ✅ 已完成
+- **当前架构**：
+  - `storage.ts:resolveAudioPath(filePath)`：JS 层唯一对外出口，供播放调用方使用。内部逻辑：含 `/Imports/` 的路径直接返回（模板导入文件，沙盒路径始终有效）；其他路径提取文件名后走 `resolveRecordingPath` 动态定位
+  - `nativePitchRecorder.ts:resolveRecordingPath(filename)`：底层 Native Bridge，仅在 `storage.ts` 内部和文件系统操作场景直接调用
+  - 旧的 `getRecordingPath()` / `getPitchDataPath()` 已删除
+- **RecordingsScreen 的 3 处直接调用**：分享录音、删录音时保留模板（复制文件到 Imports/）、批量删除时保留模板。这三处需要真实完整路径做文件系统操作（Share / RNFS.copyFile），**直接调用 `resolveRecordingPath` 是正确的**，不属于遗漏
+- **注意**：`resolveAudioPath` 的路径解析逻辑被删掉过一次导致播放失败，已记录在 memory/feedback_audio_path.md，不要再改
 
 ### CF1-5. `useDoubleTap` Hook 是死代码
 - **现状**：`utils/doubleTap.ts` 封装了 `useDoubleTap`，但 `PracticeScreen` 自己用 `lastTapTimeRef + handleDoubleTap` 重新实现了一遍，逻辑完全一样
