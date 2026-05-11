@@ -112,12 +112,12 @@
   2. 在 `computeViewport` 调用前对 `rawAnchor` 做钳位：`anchor = rawAnchor > totalDuration ? totalDuration : rawAnchor`，无论计时器超调还是拖动越界，红线都钉在右边框而不是消失。
 - **涉及文件**：`src/components/PitchChart.tsx`
 
-### 2. 偶发：点击「放弃」后出现钢琴声（待定位）
-- **状态**：🐛 偶发，未找到稳定复现路径
-- **现象**：
-  - 点击「放弃」停止录音后，会听到钢琴音播放出来
-- **可能原因**：`discardRecording` 调用了 `audioPlayer.stopAll()` 和 `audioService.stopPlayback()`，但没有调用 `audioPlayer.release()`；若此时有残留的 Sound 对象（钢琴音或模板音），iOS 可能在 session 重置后恢复播放。可对比 `activatePlaybackSession` 的逻辑——它强制 `release()` 再激活 session。
-- **涉及文件**：`src/screens/PracticeScreen.tsx`（`discardRecording` 函数）
+### ~~2. 偶发：点击「放弃」后出现钢琴声~~（已解决）
+- **状态**：✅ 已修复
+- **现象**：点击「放弃」停止录音后，会听到钢琴音播放出来
+- **根本原因**：`discardRecording` 没有调用 `audioPlayer.release()`；iOS 在 audio session 重置时会恢复残留 Sound 对象的播放
+- **修复方案**：在 `discardRecording` 中调用 `audioPlayer.release()`，确保所有钢琴 Sound 对象在 session 重置前被释放
+- **涉及文件**：`src/hooks/useRecording.ts`
 
 ### 3. ~~模板橙色线加载后部分不显示~~（已解决）
 - **状态**：✅ 已修复
