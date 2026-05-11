@@ -23,13 +23,13 @@
 - ~~`AudioService`：startRecording / pauseRecording / resumeRecording / stopRecording 的状态流转~~ ✅
 - ~~`PracticeScreen` 录音状态机：idle → recording → paused → idle 的关键路径~~ ✅（以 `useRecording` Hook 测试覆盖）
 
-### 阶段四：中风险重构（有测试保护后再做）
-- **CF1-4**：统一路径解析逻辑到单一出口
-- **CF1-3**：AudioService 录音/回放职责拆分（或命名空间隔离）
+### ~~阶段四：中风险重构（有测试保护后再做）~~ ✅ 已完成
+- ~~**CF1-4**：统一路径解析逻辑到单一出口~~ ✅（commit `27250e6`：resolveAudioPath 迁移至 storage.ts；RecordingsScreen 中 3 处直接调用 resolveRecordingPath 为文件系统操作，不经过 resolveAudioPath 属于正确用法）
+- ~~**CF1-3**：AudioService 录音/回放职责拆分（或命名空间隔离）~~ ✅（commit `27250e6`：已用 Recording / Playback / Session helpers 三区块重组，对外 API 不变）
 
-### 阶段五：高风险重构（最后做）
-- **CF1-1**：PracticeScreen 拆分 `useRecording` / `useTemplateAudio` Hook
-- **CF1-2**：模板音频纳入统一音频管理路径
+### ~~阶段五：高风险重构（最后做）~~ ✅ 已完成
+- ~~**CF1-1**：PracticeScreen 拆分 `useRecording` / `useTemplateAudio` Hook~~ ✅（commit `a923013`：两个 Hook 已抽出，PracticeScreen 缩减为纯 UI 层）
+- **CF1-2**：模板音频纳入统一音频管理路径 — 暂不做。`useTemplateAudio` 自洽管理 Sound 生命周期，相关 Bug（放弃后钢琴声）已通过 `audioPlayer.release()` 修复，当前无明显风险
 
 ---
 
