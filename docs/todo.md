@@ -17,11 +17,11 @@
 - ~~**CF1-6**：`PitchCanvas.tsx` 里的 `freqToMidi` 改为 import `noteUtils.ts` 的版本~~ ✅ 已完成（提取为 `freqToMidiFloat`，保留浮点精度）
 - ~~**CF1-5**：`PracticeScreen` 改用 `useDoubleTap` Hook，或删除 `doubleTap.ts`（二选一）~~ ✅ 已完成（使用 `useDoubleTap`）
 
-### 阶段三：补关键单测（重构前的安全网）
+### ~~阶段三：补关键单测（重构前的安全网）~~ ✅ 已完成
 在动核心逻辑之前，先给以下模块补测试：
-- `noteUtils.ts`：freqToMidi / midiToNoteName / noteNameToMidi / getCentsDeviation（纯函数，最好写）
-- `AudioService`：startRecording / pauseRecording / resumeRecording / stopRecording 的状态流转
-- `PracticeScreen` 录音状态机：idle → recording → paused → idle 的关键路径
+- ~~`noteUtils.ts`：freqToMidi / midiToNoteName / noteNameToMidi / getCentsDeviation（纯函数，最好写）~~ ✅
+- ~~`AudioService`：startRecording / pauseRecording / resumeRecording / stopRecording 的状态流转~~ ✅
+- ~~`PracticeScreen` 录音状态机：idle → recording → paused → idle 的关键路径~~ ✅（以 `useRecording` Hook 测试覆盖）
 
 ### 阶段四：中风险重构（有测试保护后再做）
 - **CF1-4**：统一路径解析逻辑到单一出口
