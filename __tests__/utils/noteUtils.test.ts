@@ -116,6 +116,76 @@ describe('getCentsDeviation', () => {
   })
 })
 
+describe('freqToMidiFloat', () => {
+  it('A4 (440Hz) → 69.0（精确）', () => {
+    const { freqToMidiFloat } = require('../../src/utils/noteUtils')
+    expect(freqToMidiFloat(440)).toBeCloseTo(69, 10)
+  })
+
+  it('A4+50音分 → 69.5', () => {
+    const { freqToMidiFloat } = require('../../src/utils/noteUtils')
+    const halfSemitone = 440 * Math.pow(2, 0.5 / 12)
+    expect(freqToMidiFloat(halfSemitone)).toBeCloseTo(69.5, 5)
+  })
+
+  it('与 freqToMidi 差值在 ±0.5 内（取整一致）', () => {
+    const { freqToMidi, freqToMidiFloat } = require('../../src/utils/noteUtils')
+    expect(Math.abs(freqToMidiFloat(440) - freqToMidi(440))).toBeLessThan(0.5)
+    expect(Math.abs(freqToMidiFloat(261.63) - freqToMidi(261.63))).toBeLessThan(0.5)
+  })
+})
+
+describe('noteNameToFreq', () => {
+  it('A4 → 440Hz', () => {
+    const { noteNameToFreq } = require('../../src/utils/noteUtils')
+    expect(noteNameToFreq('A4')).toBeCloseTo(440, 2)
+  })
+
+  it('A5 → 880Hz（高八度）', () => {
+    const { noteNameToFreq } = require('../../src/utils/noteUtils')
+    expect(noteNameToFreq('A5')).toBeCloseTo(880, 2)
+  })
+
+  it('无效字符串返回 0', () => {
+    const { noteNameToFreq } = require('../../src/utils/noteUtils')
+    expect(noteNameToFreq('')).toBe(0)
+    expect(noteNameToFreq('X4')).toBe(0)
+  })
+
+  it('与 noteNameToMidi + midiToFreq 结果一致', () => {
+    const { noteNameToFreq, noteNameToMidi, midiToFreq } = require('../../src/utils/noteUtils')
+    expect(noteNameToFreq('C4')).toBeCloseTo(midiToFreq(noteNameToMidi('C4')), 5)
+  })
+})
+
+describe('getMidiDistance', () => {
+  it('C4 到 A4 → 9 半音', () => {
+    const { getMidiDistance } = require('../../src/utils/noteUtils')
+    expect(getMidiDistance('C4', 'A4')).toBe(9)
+  })
+
+  it('A4 到 C4 → -9（负方向）', () => {
+    const { getMidiDistance } = require('../../src/utils/noteUtils')
+    expect(getMidiDistance('A4', 'C4')).toBe(-9)
+  })
+
+  it('相同音符 → 0', () => {
+    const { getMidiDistance } = require('../../src/utils/noteUtils')
+    expect(getMidiDistance('C4', 'C4')).toBe(0)
+  })
+
+  it('C4 到 C5 → 12 半音（一个八度）', () => {
+    const { getMidiDistance } = require('../../src/utils/noteUtils')
+    expect(getMidiDistance('C4', 'C5')).toBe(12)
+  })
+
+  it('无效音符返回 0', () => {
+    const { getMidiDistance } = require('../../src/utils/noteUtils')
+    expect(getMidiDistance('X4', 'C4')).toBe(0)
+    expect(getMidiDistance('C4', '')).toBe(0)
+  })
+})
+
 describe('isPitchAccurate', () => {
   it('偏差在阈值内返回 true', () => {
     expect(isPitchAccurate(440, 442, 20)).toBe(true)
