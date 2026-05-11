@@ -182,11 +182,12 @@ interface PitchTemplate {
 | 已连接耳机 / 蓝牙音频 | 直接播放，无提示 |
 | 未连接耳机 | 弹提示：「未检测到耳机，建议戴耳机以获得最佳效果。」用户确认后继续播放 |
 
-### 回声消除
+### 回声消除与 Voice Processing
 
-- 无耳机时，模板音频从扬声器播出会被麦克风收入
-- 现有代码已启用系统 AUVoiceIO 语音处理（`setVoiceProcessingEnabled:YES`），包含回声消除（AEC）
-- AEC 会将扬声器播出的音频从麦克风信号中消除，保留人声，**无需额外开发**
+- 无耳机时，模板音频从扬声器播出会被麦克风收入，建议用户佩戴耳机
+- **有模板时主动禁用 Voice Processing（AUVoiceIO）**：`startDetection` 接收 `disableVoiceProcessing` 参数，有模板时传 `true`，跳过 `setVoiceProcessingEnabled:YES`
+- 原因：`react-native-sound`（`AVAudioPlayer`）与 `AVAudioEngine`（`AUVoiceIO`）同时运行时，引擎的 `mainMixerNode.outputVolume = 0` 导致 AUVoiceIO 拿到错误的扬声器参考信号，回声消除产生伪影，导致音高检测抖动和图表掉帧
+- 无模板时 Voice Processing 保持开启，提供降噪效果
 
 ### 播放控制
 

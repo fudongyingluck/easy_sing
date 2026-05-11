@@ -111,8 +111,18 @@ describe('录音状态机', () => {
 
     it('调用 startDetection 和 startRecording', async () => {
       await service.startRecording(600, 100)
-      expect(nativePitchRecorder.startDetection).toHaveBeenCalledWith(100)
+      expect(nativePitchRecorder.startDetection).toHaveBeenCalledWith(100, false)
       expect(nativePitchRecorder.startRecording).toHaveBeenCalled()
+    })
+
+    it('有模板时：startDetection 第二参数为 true（禁用 VP）', async () => {
+      await service.startRecording(600, 100, true)
+      expect(nativePitchRecorder.startDetection).toHaveBeenCalledWith(100, true)
+    })
+
+    it('无模板时：startDetection 第二参数为 false（保留 VP）', async () => {
+      await service.startRecording(600, 100, false)
+      expect(nativePitchRecorder.startDetection).toHaveBeenCalledWith(100, false)
     })
 
     it('录音中 getRecordingElapsed 返回大于等于 0 的值', async () => {

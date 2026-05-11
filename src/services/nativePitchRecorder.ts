@@ -4,9 +4,10 @@ const { PitchDetectorModule } = NativeModules
 const emitter = new NativeEventEmitter(PitchDetectorModule)
 
 export const nativePitchRecorder = {
-  /** 启动 AVAudioEngine，开始发送音高事件（detectionRate: Hz，控制检测频率） */
-  startDetection: (detectionRate: number): Promise<void> =>
-    PitchDetectorModule.startDetection(detectionRate),
+  /** 启动 AVAudioEngine，开始发送音高事件（detectionRate: Hz，控制检测频率）
+   *  disableVoiceProcessing: true 时跳过 AUVoiceIO，避免模板音频与回声消除冲突 */
+  startDetection: (detectionRate: number, disableVoiceProcessing = false): Promise<void> =>
+    PitchDetectorModule.startDetection(detectionRate, disableVoiceProcessing),
 
   /** 停止 AVAudioEngine */
   stopDetection: (): Promise<void> =>

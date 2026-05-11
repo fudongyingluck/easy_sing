@@ -67,7 +67,7 @@ export class AudioService {
   // Recording
   // ═════════════════════════════════════════════════════════════════════════
 
-  async startRecording(durationLimit: number = DEFAULT_MAX_DURATION, detectionRate: number = 100): Promise<string> {
+  async startRecording(durationLimit: number = DEFAULT_MAX_DURATION, detectionRate: number = 100, disableVoiceProcessing = false): Promise<string> {
     // 先停掉所有回放，确保 audio session 干净
     this.stopPlayback()
     this._stopRecordingListeners()
@@ -80,7 +80,7 @@ export class AudioService {
     this.isPaused = false
 
     this.activatePlaybackSession()
-    await nativePitchRecorder.startDetection(detectionRate)
+    await nativePitchRecorder.startDetection(detectionRate, disableVoiceProcessing)
     await nativePitchRecorder.startRecording()
 
     this.recordingStartTime = Date.now()

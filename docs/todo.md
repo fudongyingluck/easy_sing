@@ -62,26 +62,21 @@
   - 第三个分支删掉多余的 `setCurrentTime(0)`，改为 `startAudio(activeRecording, currentTime)`
 - **涉及文件**：`src/screens/RecordingsScreen.tsx`（`startAudio` / `togglePlayPause`）
 
-### 0. 录音中音高曲线和音频周期性掉段（待定位）
-- **状态**：🔍 原因未确认，待复现验证
+### ~~0. 录音中音高曲线和音频周期性掉段~~（已解决）
+- **状态**：✅ 已修复
 - **现象**：
-  - 录音过程中，音高曲线和声音会周期性消失一小段（约几百毫秒），然后恢复，反复发生
-- **关键判别证据（新增）**：
-  - ✅ **无模板时不掉帧**，有模板时掉帧 → 掉帧与模板播放强相关
-  - 模板音频通过**有线耳机**播放，不是扬声器 → 排除 AEC 回声消除模板音频的可能（麦克风拾不到耳机内的声音）
-  - → 原因 1（`setVoiceProcessingEnabled:YES` 把唱歌音当噪声压制）仍有可能，但需重新评估：AUVoiceIO 在有音频输出时是否行为不同？
-  - → **新增最可能原因**：模板开始播放时 `react-native-sound` 内部重置 AVAudioSession category 为 `.playback`，与录音所需的 `.playAndRecord` 冲突，导致周期性中断
-- **可能原因（按可能性排序，已修订）**：
-  1. **Audio Session 冲突（新，最可能）**：`startTemplateAudio` 启动 react-native-sound 时，Sound 对象可能将 AVAudioSession 切回 `.playback` category，破坏录音 session，周期性触发 engine 中断
-  2. **`setVoiceProcessingEnabled:YES`**：AUVoiceIO 在同时有音频输出时可能触发更激进的噪声抑制，把人声当噪声压制
-  3. **AVAudioEngine 路由变化后无恢复机制**：代码未监听 `AVAudioEngineConfigurationChangeNotification`，耳机插拔/路由变化时 engine 暂停后无法重启
-  4. **滑窗 buffer size 问题**：路由变化瞬间 iOS 可能下发小 buffer（< kWindow=2048 frames），导致滑窗条件 `offset + kWindow <= frames` 不成立，整段无分析
-- **验证方法**：
-  - 掉段后回放那段录音——若那段是**真静音**则 session 被中断（原因 1/2）；若声音完整但曲线空白则原因 3/4
-  - 在 `startTemplateAudio` 前后打印 `AVAudioSession.sharedInstance().category`，确认是否被改变
+  - 有模板时唱歌，音高曲线掉帧（图表不流畅）、听感有抖动；无模板时正常
+- **根本原因**：
+  - `AVAudioEngine` 开启了 Voice Processing（`setVoiceProcessingEnabled:YES` → AUVoiceIO），同时模板音频通过 `react-native-sound`（`AVAudioPlayer`）独立播放
+  - `mainMixerNode.outputVolume = 0`（引擎自身输出为静音），导致 AUVoiceIO 从引擎侧拿不到正确的扬声器参考信号
+  - `AVAudioPlayer` 另起音频路径输出声音，AUVoiceIO 的回声消除参考信号与实际输出不一致，在麦克风信号里产生伪影
+  - 音高检测收到含伪影的麦克风信号 → 音高值抖动 → 图表掉帧 + 听感抖动
+- **修复方案**：有模板时跳过 `setVoiceProcessingEnabled:YES`。`startDetection` 新增 `disableVoiceProcessing: BOOL` 参数，有模板时传 `true`。无模板时 VP 保持开启，保留降噪效果
 - **涉及文件**：
-  - `ios/PitchPerfect/PitchDetectorModule.mm`（第 163-167 行 voice processing、第 228 行滑窗条件）
-  - `src/hooks/useTemplateAudio.ts`（`startTemplateAudio` 函数）
+  - `ios/PitchPerfect/PitchDetectorModule.mm`（`startDetection` 增加参数）
+  - `src/services/nativePitchRecorder.ts`（透传参数）
+  - `src/services/audio.ts`（`startRecording` 增加 `hasTemplate` 参数）
+  - `src/hooks/useRecording.ts`（传入 `hasTemplate`）
 
 ### ~~1. 播放历史录音/模板时红线闪动 + 音高曲线消失~~（已解决）
 - **状态**：✅ 已修复

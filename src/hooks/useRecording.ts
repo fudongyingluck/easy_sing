@@ -89,7 +89,7 @@ export function useRecording({
         onPause?.()
       })
 
-      const id = await audioService.startRecording(recordingDurationLimit, pitchDetectionRate)
+      const id = await audioService.startRecording(recordingDurationLimit, pitchDetectionRate, hasTemplate)
       setRecordingId(id)
       setRecordingState('recording')
       setRecordingTime(0)
