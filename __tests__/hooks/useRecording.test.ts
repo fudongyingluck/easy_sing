@@ -128,10 +128,10 @@ describe('useRecording 状态机', () => {
     it('调用 audioService.startRecording，传入正确参数', async () => {
       const { result } = renderHook(() => useRecording({ ...defaultOptions, pitchDetectionRate: 50 }))
       await act(async () => { await result.current.startRecording() })
-      expect(audioService.startRecording).toHaveBeenCalledWith(600, 50, false)
+      expect(audioService.startRecording).toHaveBeenCalledWith(600, 50, true)
     })
 
-    it('有模板时：传 disableVoiceProcessing=true', async () => {
+    it('有模板时：disableVoiceProcessing 仍为 true', async () => {
       const { result } = renderHook(() => useRecording({ ...defaultOptions, hasTemplate: true }))
       await act(async () => { await result.current.startRecording() })
       expect(audioService.startRecording).toHaveBeenCalledWith(600, 100, true)
