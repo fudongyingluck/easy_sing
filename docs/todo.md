@@ -17,23 +17,30 @@
 - ~~**CF1-6**：`PitchCanvas.tsx` 里的 `freqToMidi` 改为 import `noteUtils.ts` 的版本~~ ✅ 已完成（提取为 `freqToMidiFloat`，保留浮点精度）
 - ~~**CF1-5**：`PracticeScreen` 改用 `useDoubleTap` Hook，或删除 `doubleTap.ts`（二选一）~~ ✅ 已完成（使用 `useDoubleTap`）
 
-### 阶段三：补关键单测（重构前的安全网）
+### ~~阶段三：补关键单测（重构前的安全网）~~ ✅ 已完成
 在动核心逻辑之前，先给以下模块补测试：
-- `noteUtils.ts`：freqToMidi / midiToNoteName / noteNameToMidi / getCentsDeviation（纯函数，最好写）
-- `AudioService`：startRecording / pauseRecording / resumeRecording / stopRecording 的状态流转
-- `PracticeScreen` 录音状态机：idle → recording → paused → idle 的关键路径
+- ~~`noteUtils.ts`：freqToMidi / midiToNoteName / noteNameToMidi / getCentsDeviation（纯函数，最好写）~~ ✅
+- ~~`AudioService`：startRecording / pauseRecording / resumeRecording / stopRecording 的状态流转~~ ✅
+- ~~`PracticeScreen` 录音状态机：idle → recording → paused → idle 的关键路径~~ ✅（以 `useRecording` Hook 测试覆盖）
 
-### 阶段四：中风险重构（有测试保护后再做）
-- **CF1-4**：统一路径解析逻辑到单一出口
-- **CF1-3**：AudioService 录音/回放职责拆分（或命名空间隔离）
+### ~~阶段四：中风险重构（有测试保护后再做）~~ ✅ 已完成
+- ~~**CF1-4**：统一路径解析逻辑到单一出口~~ ✅（commit `27250e6`：resolveAudioPath 迁移至 storage.ts；RecordingsScreen 中 3 处直接调用 resolveRecordingPath 为文件系统操作，不经过 resolveAudioPath 属于正确用法）
+- ~~**CF1-3**：AudioService 录音/回放职责拆分（或命名空间隔离）~~ ✅（commit `27250e6`：已用 Recording / Playback / Session helpers 三区块重组，对外 API 不变）
 
-### 阶段五：高风险重构（最后做）
-- **CF1-1**：PracticeScreen 拆分 `useRecording` / `useTemplateAudio` Hook
-- **CF1-2**：模板音频纳入统一音频管理路径
+### ~~阶段五：高风险重构（最后做）~~ ✅ 已完成
+- ~~**CF1-1**：PracticeScreen 拆分 `useRecording` / `useTemplateAudio` Hook~~ ✅（commit `a923013`：两个 Hook 已抽出，PracticeScreen 缩减为纯 UI 层）
+- **CF1-2**：模板音频纳入统一音频管理路径 — 暂不做。`useTemplateAudio` 自洽管理 Sound 生命周期，相关 Bug（放弃后钢琴声）已通过 `audioPlayer.release()` 修复，当前无明显风险
 
 ---
 
 ## Bug 列表
+
+### 6. 无模板时点击开始/放弃在侧边出现系统音量条（2026-05-13）
+- **状态**：🟡 临时修复（降噪已关闭），后续待优化
+- **现象**：没有模板时，点击"开始"或"放弃"按钮，侧边弹出 iOS 系统音量条；有模板时正常
+- **根本原因**：无模板时 `disableVoiceProcessing=false`，`startDetection` 调用 `setVoiceProcessingEnabled:YES` 开启 VPIO，iOS 内部将 AVAudioSession 模式切换为 VoiceChat（通话模式），触发侧边通话音量 HUD；放弃时 session 停用，通话模式退出，再次触发
+- **临时方案**：`useRecording.ts` 中 `disableVoiceProcessing` 始终传 `true`，全局关闭 VPIO 降噪，消除音量条副作用
+- **后续优化方向**：在录音期间放一个离屏隐藏 `MPVolumeView`（MediaPlayer 框架），恢复 VPIO 降噪的同时压制系统音量 HUD
 
 ### ~~5. 历史播放器：播放到末尾偶发不归零~~（已解决）
 - **状态**：✅ 已修复
@@ -62,26 +69,21 @@
   - 第三个分支删掉多余的 `setCurrentTime(0)`，改为 `startAudio(activeRecording, currentTime)`
 - **涉及文件**：`src/screens/RecordingsScreen.tsx`（`startAudio` / `togglePlayPause`）
 
-### 0. 录音中音高曲线和音频周期性掉段（待定位）
-- **状态**：🔍 原因未确认，待复现验证
+### ~~0. 录音中音高曲线和音频周期性掉段~~（已解决）
+- **状态**：✅ 已修复
 - **现象**：
-  - 录音过程中，音高曲线和声音会周期性消失一小段（约几百毫秒），然后恢复，反复发生
-- **关键判别证据（新增）**：
-  - ✅ **无模板时不掉帧**，有模板时掉帧 → 掉帧与模板播放强相关
-  - 模板音频通过**有线耳机**播放，不是扬声器 → 排除 AEC 回声消除模板音频的可能（麦克风拾不到耳机内的声音）
-  - → 原因 1（`setVoiceProcessingEnabled:YES` 把唱歌音当噪声压制）仍有可能，但需重新评估：AUVoiceIO 在有音频输出时是否行为不同？
-  - → **新增最可能原因**：模板开始播放时 `react-native-sound` 内部重置 AVAudioSession category 为 `.playback`，与录音所需的 `.playAndRecord` 冲突，导致周期性中断
-- **可能原因（按可能性排序，已修订）**：
-  1. **Audio Session 冲突（新，最可能）**：`startTemplateAudio` 启动 react-native-sound 时，Sound 对象可能将 AVAudioSession 切回 `.playback` category，破坏录音 session，周期性触发 engine 中断
-  2. **`setVoiceProcessingEnabled:YES`**：AUVoiceIO 在同时有音频输出时可能触发更激进的噪声抑制，把人声当噪声压制
-  3. **AVAudioEngine 路由变化后无恢复机制**：代码未监听 `AVAudioEngineConfigurationChangeNotification`，耳机插拔/路由变化时 engine 暂停后无法重启
-  4. **滑窗 buffer size 问题**：路由变化瞬间 iOS 可能下发小 buffer（< kWindow=2048 frames），导致滑窗条件 `offset + kWindow <= frames` 不成立，整段无分析
-- **验证方法**：
-  - 掉段后回放那段录音——若那段是**真静音**则 session 被中断（原因 1/2）；若声音完整但曲线空白则原因 3/4
-  - 在 `startTemplateAudio` 前后打印 `AVAudioSession.sharedInstance().category`，确认是否被改变
+  - 有模板时唱歌，音高曲线掉帧（图表不流畅）、听感有抖动；无模板时正常
+- **根本原因**：
+  - `AVAudioEngine` 开启了 Voice Processing（`setVoiceProcessingEnabled:YES` → AUVoiceIO），同时模板音频通过 `react-native-sound`（`AVAudioPlayer`）独立播放
+  - `mainMixerNode.outputVolume = 0`（引擎自身输出为静音），导致 AUVoiceIO 从引擎侧拿不到正确的扬声器参考信号
+  - `AVAudioPlayer` 另起音频路径输出声音，AUVoiceIO 的回声消除参考信号与实际输出不一致，在麦克风信号里产生伪影
+  - 音高检测收到含伪影的麦克风信号 → 音高值抖动 → 图表掉帧 + 听感抖动
+- **修复方案**：有模板时跳过 `setVoiceProcessingEnabled:YES`。`startDetection` 新增 `disableVoiceProcessing: BOOL` 参数，有模板时传 `true`。无模板时 VP 保持开启，保留降噪效果
 - **涉及文件**：
-  - `ios/PitchPerfect/PitchDetectorModule.mm`（第 163-167 行 voice processing、第 228 行滑窗条件）
-  - `src/hooks/useTemplateAudio.ts`（`startTemplateAudio` 函数）
+  - `ios/PitchPerfect/PitchDetectorModule.mm`（`startDetection` 增加参数）
+  - `src/services/nativePitchRecorder.ts`（透传参数）
+  - `src/services/audio.ts`（`startRecording` 增加 `hasTemplate` 参数）
+  - `src/hooks/useRecording.ts`（传入 `hasTemplate`）
 
 ### ~~1. 播放历史录音/模板时红线闪动 + 音高曲线消失~~（已解决）
 - **状态**：✅ 已修复
@@ -117,12 +119,12 @@
   2. 在 `computeViewport` 调用前对 `rawAnchor` 做钳位：`anchor = rawAnchor > totalDuration ? totalDuration : rawAnchor`，无论计时器超调还是拖动越界，红线都钉在右边框而不是消失。
 - **涉及文件**：`src/components/PitchChart.tsx`
 
-### 2. 偶发：点击「放弃」后出现钢琴声（待定位）
-- **状态**：🐛 偶发，未找到稳定复现路径
-- **现象**：
-  - 点击「放弃」停止录音后，会听到钢琴音播放出来
-- **可能原因**：`discardRecording` 调用了 `audioPlayer.stopAll()` 和 `audioService.stopPlayback()`，但没有调用 `audioPlayer.release()`；若此时有残留的 Sound 对象（钢琴音或模板音），iOS 可能在 session 重置后恢复播放。可对比 `activatePlaybackSession` 的逻辑——它强制 `release()` 再激活 session。
-- **涉及文件**：`src/screens/PracticeScreen.tsx`（`discardRecording` 函数）
+### ~~2. 偶发：点击「放弃」后出现钢琴声~~（已解决）
+- **状态**：✅ 已修复
+- **现象**：点击「放弃」停止录音后，会听到钢琴音播放出来
+- **根本原因**：`discardRecording` 没有调用 `audioPlayer.release()`；iOS 在 audio session 重置时会恢复残留 Sound 对象的播放
+- **修复方案**：在 `discardRecording` 中调用 `audioPlayer.release()`，确保所有钢琴 Sound 对象在 session 重置前被释放
+- **涉及文件**：`src/hooks/useRecording.ts`
 
 ### 3. ~~模板橙色线加载后部分不显示~~（已解决）
 - **状态**：✅ 已修复
@@ -133,13 +135,8 @@
 - **修复方案**：在 `PitchCanvas` 内部添加 `useEffect`，当 `templateData` 变化（从无到有）后，触发一次额外的 `forceUpdate`，使 react-native-svg 补全渲染。
 - **涉及文件**：`src/components/PitchCanvas.tsx`
 
-### 2. 模板橙色线在滑动视口时突然消失（同上，待验证是否已被修复）
-- **现象**：
-  - 在 [3,9] 视口内，可以看到三根橙色模板线：[3, 4.5]、[5.7, 7.2]、[8, -]
-  - 滑动到 [5,11] 视口时，[8, 9.4] 这条线突然消失
-  - 新出现了 [10.3, -] 这条线
-- **原因分析**：与 Bug 1 同根因，react-native-svg 在新增 Path 时的渲染缺失问题
-- **涉及文件**：`src/components/PitchCanvas.tsx`
+### ~~2. 模板橙色线在滑动视口时突然消失~~（已解决）
+- **状态**：✅ 已验证，Bug3 的 forceUpdate 修复同时解决了此问题，实测无复现
 
 ### 2. ~~Native 层忽略用户设置的检测频率~~（已解决）
 - **状态**：✅ 已修复
@@ -188,12 +185,13 @@
 - **现状**：`audio.ts` 里同时有 `startRecording/pauseRecording/stopRecording` 和 `playAudio/pausePlayback/resumePlayback/seekTo`，两个场景完全互斥但共处一类，`stopAll` 逻辑因此复杂
 - **修复方向**：拆分为 `RecordingService` 和 `PlaybackService`，或至少在类内部通过命名空间清晰隔离
 
-### CF1-4. 路径解析逻辑分散在三处
-- **现状**：
-  - `audio.ts` 里有 `resolveAudioPath()`
-  - `storage.ts` 里有 `getRecordingPath()` / `getPitchDataPath()`
-  - `nativePitchRecorder.ts` 里有 `resolveRecordingPath()`
-- **修复方向**：统一收拢到 `storage.ts` 或新建 `pathUtils.ts`，单一出口
+### ~~CF1-4. 路径解析逻辑分散在三处~~ ✅ 已完成
+- **当前架构**：
+  - `storage.ts:resolveAudioPath(filePath)`：JS 层唯一对外出口，供播放调用方使用。内部逻辑：含 `/Imports/` 的路径直接返回（模板导入文件，沙盒路径始终有效）；其他路径提取文件名后走 `resolveRecordingPath` 动态定位
+  - `nativePitchRecorder.ts:resolveRecordingPath(filename)`：底层 Native Bridge，仅在 `storage.ts` 内部和文件系统操作场景直接调用
+  - 旧的 `getRecordingPath()` / `getPitchDataPath()` 已删除
+- **RecordingsScreen 的 3 处直接调用**：分享录音、删录音时保留模板（复制文件到 Imports/）、批量删除时保留模板。这三处需要真实完整路径做文件系统操作（Share / RNFS.copyFile），**直接调用 `resolveRecordingPath` 是正确的**，不属于遗漏
+- **注意**：`resolveAudioPath` 的路径解析逻辑被删掉过一次导致播放失败，已记录在 memory/feedback_audio_path.md，不要再改
 
 ### CF1-5. `useDoubleTap` Hook 是死代码
 - **现状**：`utils/doubleTap.ts` 封装了 `useDoubleTap`，但 `PracticeScreen` 自己用 `lastTapTimeRef + handleDoubleTap` 重新实现了一遍，逻辑完全一样
@@ -242,6 +240,7 @@
 - [ ] 钢琴音频延音很长，尾音听起来不自然（可考虑淡出或限制最大播放时长）
 
 ### 音高曲线
+- [ ] 优化音高曲线展示方式：目前线条抖动感强，看起来像「颤抖」而非「颤音」，需改善视觉平滑度（2026-05-13）
 - [ ] 音高检测区域增加缩放功能（双指捏合缩放横轴时间范围 / 纵轴音高范围）
 - [ ] 分享音准曲线：将音高曲线截图为图片，通过系统分享面板发送（微信 / AirDrop / 存相册等）
 

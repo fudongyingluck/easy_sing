@@ -121,6 +121,7 @@ RCT_EXPORT_METHOD(removeListeners:(double)count) {
 // startDetection
 // ---------------------------------------------------------------------------
 RCT_EXPORT_METHOD(startDetection:(double)detectionRate
+                  disableVoiceProcessing:(BOOL)disableVoiceProcessing
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
   if (_running) { resolve(nil); return; }
@@ -160,7 +161,7 @@ RCT_EXPORT_METHOD(startDetection:(double)detectionRate
 
     // 启用系统内置语音处理（回声消除 + 降噪），iOS 13+
     // 需要 mixer→output 连接存在，否则 AUVoiceIO 输出侧报 render err
-    if ([inputNode respondsToSelector:@selector(setVoiceProcessingEnabled:error:)]) {
+    if (!disableVoiceProcessing && [inputNode respondsToSelector:@selector(setVoiceProcessingEnabled:error:)]) {
       NSError *vpError = nil;
       [inputNode setVoiceProcessingEnabled:YES error:&vpError];
       // vpError 不影响录音主流程，仅在调试时关注
